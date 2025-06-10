@@ -1,0 +1,39 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Elder Wand Cursor - heavily left-slanted, head on left, body to bottom right */
+  cursor: url('../public/elder-wand-cursor.svg') 4 28, auto;
+  position: relative;
+  overflow-x: hidden;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Global Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Interactive elements get enhanced cursor with pointer fallback */
+button, a, .clickable {
+  cursor: url('../public/elder-wand-cursor.svg') 4 28, pointer;
+}
+
+/* Text inputs get text cursor */
+input[type="text"], input[type="search"], textarea {
+  cursor: text;
+}
+
+/* Hover effects for interactive elements */
+button:hover, a:hover, .clickable:hover {
+  cursor: url('../public/elder-wand-cursor.svg') 4 28, pointer;
+}

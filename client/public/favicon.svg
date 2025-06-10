@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f4d03f;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d4af37;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Dark background -->
+  <rect width="32" height="32" rx="6" fill="#0a0a0a"/>
+  
+  <!-- Film strip holes -->
+  <rect x="2" y="4" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  <rect x="2" y="8" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  <rect x="2" y="12" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  <rect x="2" y="16" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  <rect x="2" y="20" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  <rect x="2" y="24" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  
+  <rect x="28" y="4" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  <rect x="28" y="8" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  <rect x="28" y="12" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  <rect x="28" y="16" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  <rect x="28" y="20" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  <rect x="28" y="24" width="2" height="2" rx="1" fill="#d4af37" opacity="0.6"/>
+  
+  <!-- Main film strip -->
+  <rect x="6" y="3" width="20" height="26" rx="2" fill="url(#goldGradient)" filter="url(#glow)"/>
+  
+  <!-- Film frames -->
+  <rect x="8" y="6" width="16" height="6" rx="1" fill="#0a0a0a" opacity="0.8"/>
+  <rect x="8" y="14" width="16" height="6" rx="1" fill="#0a0a0a" opacity="0.8"/>
+  <rect x="8" y="22" width="16" height="6" rx="1" fill="#0a0a0a" opacity="0.8"/>
+  
+  <!-- Play button in center frame -->
+  <polygon points="14,16 14,19 18,17.5" fill="url(#goldGradient)" filter="url(#glow)"/>
+  
+  <!-- Lens flare effect -->
+  <circle cx="20" cy="10" r="1" fill="#f4d03f" opacity="0.8"/>
+  <circle cx="21" cy="9" r="0.5" fill="#ffffff" opacity="0.6"/>
+</svg>

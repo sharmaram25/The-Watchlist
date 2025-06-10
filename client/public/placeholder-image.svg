@@ -1,0 +1,9 @@
+<!-- Placeholder for missing poster images -->
+<svg width="200" height="300" viewBox="0 0 200 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="200" height="300" fill="#2a2a2a"/>
+  <rect x="10" y="10" width="180" height="280" fill="#1a1a1a" stroke="#d4af37" stroke-width="2"/>
+  <text x="100" y="140" font-family="Arial, sans-serif" font-size="16" fill="#d4af37" text-anchor="middle">No Image</text>
+  <text x="100" y="160" font-family="Arial, sans-serif" font-size="16" fill="#d4af37" text-anchor="middle">Available</text>
+  <circle cx="100" cy="120" r="20" fill="none" stroke="#d4af37" stroke-width="2"/>
+  <path d="M90 120 L95 115 L100 125 L105 115 L110 120" stroke="#d4af37" stroke-width="2" fill="none"/>
+</svg>

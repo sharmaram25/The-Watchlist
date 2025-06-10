@@ -1,0 +1,28 @@
+{
+  "name": "the-watchlist",
+  "version": "1.0.0",
+  "description": "A Movie & TV Show Recommendation App with TMDB API integration",
+  "main": "server/server.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sharmaram25/the-watchlist.git"
+  },
+  "homepage": "https://github.com/sharmaram25/the-watchlist#readme",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && node server.js",
+    "client": "cd client && npm start",
+    "install-all": "npm install && cd server && npm install && cd ../client && npm install",
+    "build": "cd client && npm run build"
+  },
+  "keywords": ["movies", "tv-shows", "recommendations", "tmdb", "react", "nodejs", "charades", "entertainment"],
+  "author": {
+    "name": "Ram Sharma",
+    "email": "sharmaram2504@gmail.com",
+    "url": "https://github.com/sharmaram25"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
