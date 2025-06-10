@@ -60,3 +60,6 @@ jspm_packages/
 # Test files
 test-*.js
 *.test.backup
+
+# Environment Variables
+.env
