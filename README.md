@@ -13,7 +13,9 @@
 
 ---
 
-## 🌟 **Experience The Magic**
+## 📱 **App Screenshots & Features**
+
+<div align="center">
 
 <table>
 <tr>
@@ -463,42 +465,6 @@ npm run build
 ```
 
 ---
-
-## 📱 Screenshots
-
-### Homepage
-![Homepage](home.png)
-*Stunning hero section with trending content*
-
-### Movie Charades Game
-![Charades Game](charades.png)
-*Fun movie guessing game with multi-language support*
-
-### Personal Ratings Dashboard
-![Ratings Dashboard](ratings.png)
-*Track your viewing habits and preferences*
-
-### Movie Cards & Content
-![Movie Cards](cards.png)
-*Beautiful movie cards with rating system*
-
----
-
-## 📱 Screenshots
-
-### Homepage
-![Homepage](home.png)
-*Stunning hero section with trending content*
-
-### Movie Charades Game
-![Charades Game](charades.png)
-*Fun movie guessing game with multi-language support*
-
-### Personal Ratings Dashboard
-![Ratings Dashboard](ratings.png)
-*Track your viewing habits and preferences*
-
-### Movie Cards & Content
 ![Movie Cards](cards.png)
 *Beautiful movie cards with rating system*
 
@@ -702,7 +668,5 @@ If The WatchList has enhanced your movie discovery journey, please consider:
 ---
 
 **🌟 Made with passion, precision, and popcorn 🍿**
-
-</div>
 
 </div>
