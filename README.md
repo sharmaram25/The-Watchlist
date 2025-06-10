@@ -647,6 +647,47 @@ If The WatchList has enhanced your movie discovery journey, please consider:
 
 ---
 
+## 🚀 **Deployment Guide**
+
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v14.0.0 or higher)
+- [npm](https://www.npmjs.com/) (v6.0.0 or higher)
+- [TMDB API Key](https://developers.themoviedb.org/3/getting-started/introduction)
+
+### Local Development
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/sharmaram25/The-Watchlist.git
+   cd The-Watchlist
+   ```
+
+2. Set up environment variables:
+   - Copy `.env.example` to `.env` in both client and server directories
+   - Fill in your TMDB API key in the server `.env` file
+
+3. Run the setup script:
+   ```bash
+   # On Windows
+   .\setup.bat
+   
+   # On macOS/Linux
+   chmod +x setup.sh
+   ./setup.sh
+   ```
+
+### Netlify Deployment
+1. Create a new site on [Netlify](https://app.netlify.com/)
+2. Connect to your GitHub repository
+3. Configure build settings:
+   - Build command: `npm run build`
+   - Publish directory: `client/build`
+4. Add environment variables in Netlify:
+   - `REACT_APP_API_URL`: Your deployed API URL or use Netlify Functions
+   - `REACT_APP_TMDB_IMAGE_BASE_URL`: https://image.tmdb.org/t/p
+5. Deploy! 🚀
+
+---
+
 <div align="center">
 
 ### 🎬 **Happy Watching! 🍿**
