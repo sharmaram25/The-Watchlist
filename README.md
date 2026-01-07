@@ -51,9 +51,9 @@ Whether you want something trending right now, a random charades prompt for game
 
 ---
 
-## Screenshots (Placeholders)
+## Screenshots
 
-Latest captures (stored in `docs/screenshots/`):
+Latest captures:
 
 ![Home](docs/screenshots/Home.png)
 ![Discover](docs/screenshots/Discover.png)
