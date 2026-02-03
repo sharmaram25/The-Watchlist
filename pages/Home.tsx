@@ -6,6 +6,7 @@ import { TMDB_BACKDROP_BASE_URL } from '../constants';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, Info, ChevronLeft } from 'lucide-react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
+import ConnectionErrorModal from '../components/ConnectionErrorModal';
 
 const HorizontalRail: React.FC<{ title: string; movies: Movie[]; categorySlug: string }> = ({ title, movies, categorySlug }) => (
   <div className="py-8 pl-8 md:pl-16 relative z-20">
@@ -36,6 +37,7 @@ const Home: React.FC = () => {
   const [scifiMovies, setScifiMovies] = useState<Movie[]>([]);
   const [searchResults, setSearchResults] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [currentHeroIndex, setCurrentHeroIndex] = useState(0);
   
   const [searchParams] = useSearchParams();
@@ -70,6 +72,7 @@ const Home: React.FC = () => {
         }
       } catch (error) {
         console.error("Failed to fetch home data", error);
+        setError(true);
       } finally {
         setLoading(false);
       }
@@ -112,6 +115,19 @@ const Home: React.FC = () => {
 
   return (
     <div className="bg-[#020203] min-h-screen pb-20 selection:bg-cyan-500/30">
+        
+      <ConnectionErrorModal 
+        isOpen={error} 
+        onRetry={() => {
+            setError(false);
+            setLoading(true);
+            // This will trigger the useEffect again because we are toggling loading, 
+            // but actually we need to trigger re-fetch. 
+            // A simple way is to reload the page or just re-call the effect by adding a retry dependency.
+            window.location.reload(); 
+        }} 
+      />
+
       <div className="relative h-screen w-full overflow-hidden bg-black">
         <AnimatePresence mode="wait">
             {heroMovie && (
