@@ -105,14 +105,14 @@ Core routes:
 This project uses a Vite-style environment variable:
 
 - `TMDB_API_KEY` — Server-side TMDB key for Netlify Function proxy (recommended)
-- `VITE_USE_TMDB_PROXY` — `true` to route calls through Netlify function (default)
+- `VITE_USE_TMDB_PROXY` — `true` to route calls through Netlify function (opt-in)
 - `VITE_TMDB_API_KEY` — Optional local-only fallback key for direct client calls
 
 Create a `.env.local` file (or edit your existing one):
 
 ```bash
 TMDB_API_KEY=YOUR_TMDB_API_KEY
-VITE_USE_TMDB_PROXY=true
+VITE_USE_TMDB_PROXY=false
 # Optional local fallback:
 # VITE_TMDB_API_KEY=YOUR_TMDB_API_KEY
 ```
@@ -170,6 +170,10 @@ Vite outputs the final static site in `dist/`.
 You can deploy `dist/` to any static host:
 
 - **Netlify**: `netlify.toml` is included. Set `TMDB_API_KEY` in Site Settings -> Environment Variables.
+
+If you want to use the Netlify function proxy, also set:
+
+- `VITE_USE_TMDB_PROXY=true`
 - **Vercel**: framework preset “Vite”, output `dist`
 - **GitHub Pages**: also works; consider switching from `HashRouter` only if you configure SPA rewrites
 
@@ -181,6 +185,22 @@ You can deploy `dist/` to any static host:
 
 - Ensure `VITE_TMDB_API_KEY` is set.
 - If the UI loads but results are empty, check the browser console for fetch errors.
+
+### Netlify function 404 (`/.netlify/functions/tmdb`)
+
+If you see `404 Not Found` for `/.netlify/functions/tmdb`, the site was likely deployed as static-only without Netlify Functions.
+
+Fix checklist:
+
+- Deploy from the Git repository (not drag-and-drop `dist/` only).
+- Confirm `netlify.toml` is present at repo root.
+- In Netlify Site Settings -> Environment Variables, set `TMDB_API_KEY`.
+- Trigger a fresh deploy (Clear cache and deploy site).
+
+Temporary fallback option:
+
+- Set `VITE_TMDB_API_KEY` to allow direct client TMDB calls if proxy is unavailable.
+- Keep in mind this exposes the key to users, so use only when necessary.
 
 ### CORS / image download
 

@@ -3,7 +3,7 @@ import { Movie, MovieDetails } from '../types';
 const BASE_URL = 'https://api.themoviedb.org/3';
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY as string | undefined;
 const TMDB_PROXY_URL = '/.netlify/functions/tmdb';
-const USE_PROXY = (import.meta.env.VITE_USE_TMDB_PROXY as string | undefined) !== 'false';
+const USE_PROXY = (import.meta.env.VITE_USE_TMDB_PROXY as string | undefined) === 'true';
 
 const requireApiKey = (): string => {
   if (!API_KEY) {
@@ -14,15 +14,33 @@ const requireApiKey = (): string => {
 
 const fetchFromTMDB = async <T>(endpoint: string, params: Record<string, string> = {}): Promise<T> => {
   const query = new URLSearchParams(params).toString();
-  const url = USE_PROXY
-    ? `${TMDB_PROXY_URL}?endpoint=${encodeURIComponent(endpoint)}${query ? `&${query}` : ''}`
-    : `${BASE_URL}${endpoint}?${new URLSearchParams({ api_key: requireApiKey(), ...params }).toString()}`;
 
-  const response = await fetch(url);
-  
-  if (!response.ok) {
-    throw new Error(`TMDB Error: ${response.statusText}`);
+  const fetchDirect = async (): Promise<Response> => {
+    const directQuery = new URLSearchParams({ api_key: requireApiKey(), ...params }).toString();
+    return fetch(`${BASE_URL}${endpoint}?${directQuery}`);
+  };
+
+  let response: Response;
+
+  if (USE_PROXY) {
+    const proxyUrl = `${TMDB_PROXY_URL}?endpoint=${encodeURIComponent(endpoint)}${query ? `&${query}` : ''}`;
+    response = await fetch(proxyUrl);
+
+    // Netlify function may be unavailable if deployed as static-only. Fallback to direct API when possible.
+    if ((response.status === 404 || response.status === 405) && API_KEY) {
+      response = await fetchDirect();
+    }
+  } else {
+    response = await fetchDirect();
   }
+
+  if (!response.ok) {
+    if ((response.status === 404 || response.status === 405) && USE_PROXY && !API_KEY) {
+      throw new Error('TMDB proxy endpoint not found. Ensure Netlify Functions are deployed, or set VITE_TMDB_API_KEY for direct fallback.');
+    }
+    throw new Error(`TMDB Error: ${response.status} ${response.statusText}`);
+  }
+
   return response.json();
 };
 

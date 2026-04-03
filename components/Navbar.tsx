@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, X, ArrowRight, TrendingUp, Film, Tv } from 'lucide-react';
+import { Search, X, ArrowRight, TrendingUp, Film, Tv, Menu } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { searchMulti, getTrending } from '../services/tmdbService';
@@ -49,6 +49,7 @@ const Icons = {
 const Navbar: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Movie[]>([]);
   const [trendingPreview, setTrendingPreview] = useState<Movie[]>([]);
@@ -83,6 +84,10 @@ const Navbar: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
   const navLinks = [
     { name: 'Discover', path: '/recommender', icon: <Icons.Discover /> },
     { name: 'Charades', path: '/charades', icon: <Icons.Charades /> },
@@ -100,10 +105,10 @@ const Navbar: React.FC = () => {
         className={`fixed top-0 w-full z-40 transition-all duration-700 ${
           isScrolled 
             ? 'bg-[#030305]/80 backdrop-blur-xl border-b border-white/5 py-3 shadow-[0_4px_30px_rgba(0,0,0,0.5)]' 
-            : 'bg-transparent border-b border-transparent py-6'
+            : 'bg-transparent border-b border-transparent py-3 md:py-6'
         }`}
       >
-        <div className="container mx-auto px-6 flex items-center justify-between">
+        <div className="container mx-auto px-4 sm:px-6 flex items-center justify-between gap-3">
 
           <Link to="/" className="flex items-center gap-3 group relative z-50 magnetic-target">
             <div className="relative text-cyan-400 group-hover:text-white transition-colors duration-500">
@@ -111,13 +116,13 @@ const Navbar: React.FC = () => {
                <div className="absolute inset-0 bg-cyan-400/60 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xl font-serif font-bold tracking-wide text-white leading-none group-hover:tracking-wider transition-all duration-300 uppercase">
+              <span className="text-lg sm:text-xl font-serif font-bold tracking-wide text-white leading-none group-hover:tracking-wider transition-all duration-300 uppercase">
                 The Watchlist
               </span>
             </div>
           </Link>
 
-          <div className="flex items-center gap-2 md:gap-8">
+          <div className="hidden md:flex items-center gap-2 md:gap-8">
             {navLinks.map((link) => (
               <Link 
                 key={link.name} 
@@ -150,7 +155,52 @@ const Navbar: React.FC = () => {
               <div className="absolute inset-0 bg-cyan-400/20 rounded-full blur-md opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
           </div>
+
+          <div className="flex md:hidden items-center gap-1">
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              className="p-2.5 text-white hover:text-cyan-400 transition-colors"
+              aria-label="Open search"
+            >
+              <Search size={20} />
+            </button>
+            <button
+              onClick={() => setIsMobileMenuOpen(prev => !prev)}
+              className="p-2.5 text-white hover:text-cyan-400 transition-colors"
+              aria-label="Toggle menu"
+            >
+              {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          </div>
         </div>
+
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="md:hidden border-t border-white/10 bg-[#030305]/95 backdrop-blur-2xl"
+            >
+              <div className="px-4 py-4 space-y-2">
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.name}
+                    to={link.path}
+                    className={`flex items-center gap-3 rounded-lg px-3 py-3 transition-colors ${
+                      location.pathname === link.path
+                        ? 'bg-cyan-500/15 text-cyan-300'
+                        : 'text-gray-200 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <span>{link.icon}</span>
+                    <span className="text-sm font-semibold tracking-wide">{link.name}</span>
+                  </Link>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
       <AnimatePresence>
@@ -159,22 +209,22 @@ const Navbar: React.FC = () => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="fixed inset-0 z-[60] bg-[#050505]/95 backdrop-blur-3xl flex flex-col px-6 md:px-24 overflow-y-auto"
+            className="fixed inset-0 z-[60] bg-[#050505]/95 backdrop-blur-3xl flex flex-col px-4 sm:px-6 md:px-24 overflow-y-auto"
           >
-             <div className="flex justify-between items-center py-8 border-b border-white/5">
+             <div className="flex justify-between items-center py-6 md:py-8 border-b border-white/5">
                 <div className="flex items-center gap-2 text-cyan-500">
                     <Icons.Logo />
-                    <span className="font-serif font-bold text-xl text-white">The Watchlist</span>
+                    <span className="font-serif font-bold text-lg md:text-xl text-white">The Watchlist</span>
                 </div>
                 <button 
                     onClick={() => setIsSearchOpen(false)}
-                    className="p-4 bg-white/5 rounded-full hover:bg-white/10 hover:text-cyan-400 transition-colors"
+                    className="p-3 md:p-4 bg-white/5 rounded-full hover:bg-white/10 hover:text-cyan-400 transition-colors"
                 >
-                    <X size={24} />
+                    <X size={22} />
                 </button>
              </div>
 
-            <div className="w-full max-w-5xl mx-auto pt-20 mb-16 relative">
+            <div className="w-full max-w-5xl mx-auto pt-10 md:pt-20 mb-10 md:mb-16 relative">
                <motion.div 
                  initial={{ scaleX: 0 }} 
                  animate={{ scaleX: 1 }} 
@@ -189,7 +239,7 @@ const Navbar: React.FC = () => {
                 placeholder="Search movies, tv shows..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent text-5xl md:text-7xl font-serif text-white py-8 placeholder:text-gray-700 focus:outline-none text-center selection:bg-cyan-500/30"
+                className="w-full bg-transparent text-3xl sm:text-5xl md:text-7xl font-serif text-white py-6 md:py-8 placeholder:text-gray-700 focus:outline-none text-center selection:bg-cyan-500/30"
               />
             </div>
 
