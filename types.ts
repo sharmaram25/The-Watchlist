@@ -17,8 +17,13 @@ export interface MovieDetails extends Movie {
   genres: { id: number; name: string }[];
   runtime?: number;
   episode_run_time?: number[];
+  number_of_seasons?: number;
+  number_of_episodes?: number;
   tagline?: string;
   status: string;
+  budget?: number;
+  revenue?: number;
+  vote_count?: number;
   production_companies?: {
     id: number;
     logo_path: string | null;
@@ -35,6 +40,47 @@ export interface MovieDetails extends Movie {
   similar?: {
     results: Movie[];
   };
+  reviews?: {
+    results: Review[];
+  };
+  keywords?: {
+    keywords?: Keyword[];
+    results?: Keyword[];
+  };
+  release_dates?: {
+    results: ReleaseDateResult[];
+  };
+  content_ratings?: {
+    results: ContentRating[];
+  };
+}
+
+export interface Review {
+  id: string;
+  author: string;
+  content: string;
+  rating?: number;
+  url?: string;
+}
+
+export interface Keyword {
+  id: number;
+  name: string;
+}
+
+export interface ReleaseDateResult {
+  iso_3166_1: string;
+  release_dates: {
+    certification: string;
+    iso_639_1: string;
+    release_date: string;
+    type: number;
+  }[];
+}
+
+export interface ContentRating {
+  iso_3166_1: string;
+  rating: string;
 }
 
 export interface CastMember {

@@ -2,6 +2,8 @@ import { Movie, MovieDetails } from '../types';
 
 const BASE_URL = 'https://api.themoviedb.org/3';
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY as string | undefined;
+const TMDB_PROXY_URL = '/.netlify/functions/tmdb';
+const USE_PROXY = (import.meta.env.VITE_USE_TMDB_PROXY as string | undefined) !== 'false';
 
 const requireApiKey = (): string => {
   if (!API_KEY) {
@@ -11,8 +13,12 @@ const requireApiKey = (): string => {
 };
 
 const fetchFromTMDB = async <T>(endpoint: string, params: Record<string, string> = {}): Promise<T> => {
-  const query = new URLSearchParams({ api_key: requireApiKey(), ...params }).toString();
-  const response = await fetch(`${BASE_URL}${endpoint}?${query}`);
+  const query = new URLSearchParams(params).toString();
+  const url = USE_PROXY
+    ? `${TMDB_PROXY_URL}?endpoint=${encodeURIComponent(endpoint)}${query ? `&${query}` : ''}`
+    : `${BASE_URL}${endpoint}?${new URLSearchParams({ api_key: requireApiKey(), ...params }).toString()}`;
+
+  const response = await fetch(url);
   
   if (!response.ok) {
     throw new Error(`TMDB Error: ${response.statusText}`);
@@ -54,8 +60,12 @@ export const getMoviesByGenre = async (genreId: number): Promise<Movie[]> => {
 };
 
 export const getDetails = async (id: number, type: 'movie' | 'tv'): Promise<MovieDetails> => {
+  const appendParams = type === 'movie' 
+    ? 'credits,videos,similar,reviews,keywords,release_dates'
+    : 'credits,videos,similar,reviews,keywords,content_ratings';
+  
   return fetchFromTMDB<MovieDetails>(`/${type}/${id}`, {
-    append_to_response: 'credits,videos,similar',
+    append_to_response: appendParams,
   });
 };
 

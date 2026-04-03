@@ -104,19 +104,24 @@ Core routes:
 
 This project uses a Vite-style environment variable:
 
-- `VITE_TMDB_API_KEY` — Your TMDB v3 API key
+- `TMDB_API_KEY` — Server-side TMDB key for Netlify Function proxy (recommended)
+- `VITE_USE_TMDB_PROXY` — `true` to route calls through Netlify function (default)
+- `VITE_TMDB_API_KEY` — Optional local-only fallback key for direct client calls
 
 Create a `.env.local` file (or edit your existing one):
 
 ```bash
-VITE_TMDB_API_KEY=YOUR_TMDB_API_KEY
+TMDB_API_KEY=YOUR_TMDB_API_KEY
+VITE_USE_TMDB_PROXY=true
+# Optional local fallback:
+# VITE_TMDB_API_KEY=YOUR_TMDB_API_KEY
 ```
 
 You can also start from the example file:
 
 - `.env.example`
 
-Important note: Any API key used directly in a client-side app can be discovered by end users. If you need stronger protection, proxy TMDB via a small backend (serverless function / API route) and keep secrets server-side.
+Important note: Any key used directly in client-side code can be discovered by end users. This app is configured to use a Netlify serverless proxy so your TMDB key stays server-side in production.
 
 ---
 
@@ -164,7 +169,7 @@ Vite outputs the final static site in `dist/`.
 
 You can deploy `dist/` to any static host:
 
-- **Netlify**: set build command to `npm run build` and publish directory to `dist`
+- **Netlify**: `netlify.toml` is included. Set `TMDB_API_KEY` in Site Settings -> Environment Variables.
 - **Vercel**: framework preset “Vite”, output `dist`
 - **GitHub Pages**: also works; consider switching from `HashRouter` only if you configure SPA rewrites
 
