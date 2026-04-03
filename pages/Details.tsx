@@ -4,13 +4,13 @@ import { getDetails } from '../services/tmdbService';
 import { MovieDetails } from '../types';
 import { TMDB_BACKDROP_BASE_URL, TMDB_IMAGE_BASE_URL } from '../constants';
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
-import { Play, Star, Clock, Calendar, ArrowLeft, Users, Download, X, Maximize2, ExternalLink } from 'lucide-react';
+import { Play, Star, Clock, Calendar, ArrowLeft, Users, Download, X, Maximize2, ExternalLink, DollarSign, Award, Film, Tag, MessageSquare, Zap } from 'lucide-react';
 import MovieCard from '../components/MovieCard';
 
 const Details: React.FC = () => {
   const { id, type } = useParams<{ id: string; type: 'movie' | 'tv' }>();
   const [movie, setMovie] = useState<MovieDetails | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'cast' | 'similar'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'cast' | 'crew' | 'production' | 'keywords' | 'reviews' | 'similar'>('overview');
   const [isPosterExpanded, setIsPosterExpanded] = useState(false);
   const scrollRef = useRef(null);
   const { scrollY } = useScroll({ target: scrollRef });
@@ -111,6 +111,7 @@ const Details: React.FC = () => {
                 <div className="flex items-center gap-6 text-lg text-gray-300 mb-8 font-light">
                     <span className="flex items-center gap-2 text-cyan-400">
                         <Star fill="currentColor" size={16} /> <span className="font-bold text-white">{movie.vote_average.toFixed(1)}</span>
+                        {movie.vote_count && <span className="text-xs text-gray-500 ml-1">({(movie.vote_count / 1000).toFixed(1)}K)</span>}
                     </span>
                     <span className="flex items-center gap-2">
                         <Calendar size={18}/> {new Date(movie.release_date || movie.first_air_date || '').getFullYear()}
@@ -118,6 +119,11 @@ const Details: React.FC = () => {
                     {movie.runtime && (
                         <span className="flex items-center gap-2">
                             <Clock size={18}/> {Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m
+                        </span>
+                    )}
+                    {movie.episode_run_time?.[0] && (
+                        <span className="flex items-center gap-2">
+                            <Clock size={18}/> {movie.episode_run_time[0]}m/ep
                         </span>
                     )}
                 </div>
@@ -141,14 +147,15 @@ const Details: React.FC = () => {
       <div className="relative z-20 bg-[#020203] -mt-10 rounded-t-[3rem] border-t border-white/5 pt-12 min-h-screen px-6 md:px-24 shadow-[0_-20px_50px_rgba(0,0,0,1)]">
         
         <div className="flex gap-8 border-b border-white/5 pb-4 mb-12 overflow-x-auto hide-scrollbar">
-            {['Overview', 'Cast', 'Similar'].map((tab) => (
+            {['Overview', 'Cast', 'Crew', 'Production', 'Keywords', 'Reviews', 'Similar'].map((tab) => (
                 <button
                     key={tab}
                     onClick={() => setActiveTab(tab.toLowerCase() as any)}
-                    className={`magnetic-target text-lg font-medium tracking-widest uppercase pb-4 transition-all relative whitespace-nowrap ${
+                    className={`magnetic-target text-sm md:text-lg font-medium tracking-widest uppercase pb-4 transition-all relative whitespace-nowrap ${
                         activeTab === tab.toLowerCase() ? 'text-cyan-400' : 'text-gray-600 hover:text-white'
                     }`}
                 >
+                    {tab}
                     {activeTab === tab.toLowerCase() && (
                         <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
                     )}
@@ -177,7 +184,27 @@ const Details: React.FC = () => {
                             </div>
                          )}
 
-                         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-8 border-t border-white/5">
+                         <div className="grid grid-cols-2 md:grid-cols-3 gap-8 pt-8 border-t border-white/5">
+                            {type === 'movie' && (
+                                <>
+                                    {movie.budget ? (
+                                        <div>
+                                            <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2 flex items-center gap-2">
+                                                <DollarSign size={12} /> Budget
+                                            </h4>
+                                            <p className="text-lg text-white">${(movie.budget / 1000000).toFixed(1)}M</p>
+                                        </div>
+                                    ) : null}
+                                    {movie.revenue ? (
+                                        <div>
+                                            <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2 flex items-center gap-2">
+                                                <Zap size={12} /> Revenue
+                                            </h4>
+                                            <p className="text-lg text-white">${(movie.revenue / 1000000).toFixed(1)}M</p>
+                                        </div>
+                                    ) : null}
+                                </>
+                            )}
                             {director && (
                                 <div>
                                     <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2">Director</h4>
@@ -195,13 +222,73 @@ const Details: React.FC = () => {
                                     <p className="text-lg text-white">{Math.round(movie.popularity)}</p>
                                 </div>
                             </div>
-                            {movie.production_companies?.[0] && (
+                            {type === 'tv' && movie.number_of_seasons && (
                                 <div>
-                                    <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2">Studio</h4>
-                                    <p className="text-lg text-white truncate">{movie.production_companies[0].name}</p>
+                                    <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2">Seasons</h4>
+                                    <p className="text-lg text-white">{movie.number_of_seasons}</p>
+                                </div>
+                            )}
+                            {type === 'tv' && movie.number_of_episodes && (
+                                <div>
+                                    <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2">Episodes</h4>
+                                    <p className="text-lg text-white">{movie.number_of_episodes}</p>
                                 </div>
                             )}
                          </div>
+
+                         {movie.production_companies && movie.production_companies.length > 0 && (
+                             <div className="pt-8 border-t border-white/5">
+                                <h3 className="text-xs font-bold text-cyan-500 uppercase tracking-[0.2em] mb-6">Production Studios</h3>
+                                <div className="flex flex-wrap gap-6 items-center">
+                                    {movie.production_companies.map((company) => (
+                                        <div key={company.id} className="flex items-center gap-3 bg-white/5 backdrop-blur-md border border-white/10 rounded-lg p-3 hover:border-cyan-500/30 transition-all">
+                                            {company.logo_path && (
+                                                <img 
+                                                    src={`${TMDB_IMAGE_BASE_URL}${company.logo_path}`} 
+                                                    alt={company.name}
+                                                    className="h-8 object-contain"
+                                                />
+                                            )}
+                                            <span className="text-sm text-white font-medium">{company.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                             </div>
+                         )}
+
+                         {type === 'movie' && movie.release_dates?.results?.[0] && (
+                             <div className="pt-8 border-t border-white/5">
+                                <h3 className="text-xs font-bold text-cyan-500 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                                    <Award size={14} /> Certifications
+                                </h3>
+                                <div className="flex flex-wrap gap-3">
+                                    {movie.release_dates.results.map((result, idx) => (
+                                        result.release_dates[0] && (
+                                            <div key={idx} className="px-4 py-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-center">
+                                                <p className="text-xs text-gray-400 uppercase">{result.iso_3166_1}</p>
+                                                <p className="text-sm font-bold text-cyan-400">{result.release_dates[0].certification || 'N/A'}</p>
+                                            </div>
+                                        )
+                                    ))}
+                                </div>
+                             </div>
+                         )}
+
+                         {type === 'tv' && movie.content_ratings?.results?.[0] && (
+                             <div className="pt-8 border-t border-white/5">
+                                <h3 className="text-xs font-bold text-cyan-500 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                                    <Award size={14} /> Content Ratings
+                                </h3>
+                                <div className="flex flex-wrap gap-3">
+                                    {movie.content_ratings.results.slice(0, 5).map((rating, idx) => (
+                                        <div key={idx} className="px-4 py-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-center">
+                                            <p className="text-xs text-gray-400 uppercase">{rating.iso_3166_1}</p>
+                                            <p className="text-sm font-bold text-cyan-400">{rating.rating || 'N/A'}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                             </div>
+                         )}
                     </div>
                     
                     <div className="hidden lg:block">
@@ -227,25 +314,190 @@ const Details: React.FC = () => {
 
             {activeTab === 'cast' && (
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
-                    {movie.credits?.cast.slice(0, 15).map((person, idx) => (
-                        <motion.div 
-                            key={person.id}
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: idx * 0.05 }}
-                            className="bg-white/5 p-4 rounded-xl border border-white/5 hover:border-cyan-500/30 hover:bg-white/10 transition-all group cursor-pointer"
-                        >
-                            <div className="aspect-[2/3] rounded-lg overflow-hidden mb-4 bg-neutral-900 relative">
-                                {person.profile_path ? (
-                                    <img src={`${TMDB_IMAGE_BASE_URL}${person.profile_path}`} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={person.name} />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-gray-700 text-xs uppercase tracking-widest">No Image</div>
-                                )}
+                    {movie.credits?.cast && movie.credits.cast.length > 0 ? (
+                        movie.credits.cast.slice(0, 15).map((person, idx) => (
+                            <motion.div 
+                                key={person.id}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: idx * 0.05 }}
+                                className="bg-white/5 p-4 rounded-xl border border-white/5 hover:border-cyan-500/30 hover:bg-white/10 transition-all group cursor-pointer"
+                            >
+                                <div className="aspect-[2/3] rounded-lg overflow-hidden mb-4 bg-neutral-900 relative">
+                                    {person.profile_path ? (
+                                        <img src={`${TMDB_IMAGE_BASE_URL}${person.profile_path}`} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={person.name} />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-700 text-xs uppercase tracking-widest">
+                                            <div className="text-center">
+                                                <Users size={24} className="opacity-50 mx-auto mb-2" />
+                                                <p className="text-[10px]">No Image</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <h4 className="font-bold text-white truncate text-sm">{person.name}</h4>
+                                <p className="text-xs text-cyan-500/80 truncate uppercase tracking-wider mt-1">{person.character}</p>
+                            </motion.div>
+                        ))
+                    ) : (
+                        <p className="col-span-full text-center text-gray-600 text-lg py-20 italic">No cast information available.</p>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'crew' && (
+                <div>
+                    {movie.credits?.crew && movie.credits.crew.length > 0 ? (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+                            {movie.credits.crew.slice(0, 20).map((person, idx) => (
+                                <motion.div 
+                                    key={`${person.id}-${person.job}`}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: idx * 0.05 }}
+                                    className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden hover:border-cyan-500/30 hover:bg-white/10 transition-all group"
+                                >
+                                    <div className="aspect-[2/3] bg-neutral-900 overflow-hidden relative">
+                                        {person.profile_path ? (
+                                            <img src={`${TMDB_IMAGE_BASE_URL}${person.profile_path}`} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={person.name} />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-gray-700 text-xs uppercase tracking-widest">
+                                                <div className="text-center">
+                                                    <Film size={24} className="opacity-50 mx-auto mb-2" />
+                                                    <p>No Image</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="p-4">
+                                        <h4 className="font-bold text-white truncate text-sm">{person.name}</h4>
+                                        <p className="text-xs text-cyan-400 uppercase tracking-wider font-semibold mt-2">{person.job}</p>
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-center text-gray-600 text-lg py-20 italic">No crew information available.</p>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'production' && (
+                <div className="space-y-8">
+                    {movie.production_companies && movie.production_companies.length > 0 ? (
+                        <div>
+                            <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
+                                <Film size={20} className="text-cyan-400" /> Production Companies
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {movie.production_companies.map((company) => (
+                                    <motion.div 
+                                        key={company.id}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-6 hover:border-cyan-500/30 hover:bg-white/10 transition-all group"
+                                    >
+                                        <div className="h-24 rounded-lg bg-neutral-900 mb-4 flex items-center justify-center overflow-hidden">
+                                            {company.logo_path ? (
+                                                <img 
+                                                    src={`${TMDB_IMAGE_BASE_URL}${company.logo_path}`} 
+                                                    alt={company.name}
+                                                    className="h-full object-contain group-hover:scale-105 transition-transform"
+                                                />
+                                            ) : (
+                                                <div className="text-gray-600 text-xs uppercase tracking-widest">Logo N/A</div>
+                                            )}
+                                        </div>
+                                        <h4 className="font-bold text-white truncate">{company.name}</h4>
+                                        <p className="text-xs text-cyan-500/80 uppercase tracking-wider mt-2">{company.origin_country}</p>
+                                    </motion.div>
+                                ))}
                             </div>
-                            <h4 className="font-bold text-white truncate">{person.name}</h4>
-                            <p className="text-xs text-cyan-500/80 truncate uppercase tracking-wider mt-1">{person.character}</p>
-                        </motion.div>
-                    ))}
+                        </div>
+                    ) : (
+                        <p className="text-center text-gray-600 text-lg py-20 italic">No production company information available.</p>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'keywords' && (
+                <div>
+                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
+                        <Tag size={20} className="text-cyan-400" /> Keywords & Tags
+                    </h3>
+                    {(() => {
+                        const keywords = movie.keywords?.results || movie.keywords?.keywords || [];
+                        return keywords && keywords.length > 0 ? (
+                            <div className="flex flex-wrap gap-3">
+                                {keywords.map((keyword) => (
+                                    <motion.div 
+                                        key={keyword.id}
+                                        initial={{ opacity: 0, scale: 0.8 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        className="px-4 py-2 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 rounded-full hover:border-cyan-500/60 hover:from-cyan-500/30 hover:to-blue-500/30 transition-all cursor-pointer group"
+                                    >
+                                        <span className="text-white font-medium group-hover:text-cyan-300 transition-colors">{keyword.name}</span>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-center text-gray-600 text-lg py-20 italic">No keywords available for this title.</p>
+                        );
+                    })()}
+                </div>
+            )}
+
+            {activeTab === 'reviews' && (
+                <div>
+                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
+                        <MessageSquare size={20} className="text-cyan-400" /> Reviews
+                    </h3>
+                    {movie.reviews?.results && movie.reviews.results.length > 0 ? (
+                        <div className="space-y-6">
+                            {movie.reviews.results.slice(0, 5).map((review, idx) => (
+                                <motion.div 
+                                    key={review.id}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: idx * 0.1 }}
+                                    className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-6 hover:border-cyan-500/30 transition-all"
+                                >
+                                    <div className="flex items-start justify-between mb-3">
+                                        <div className="flex-1">
+                                            <h4 className="font-bold text-white">{review.author}</h4>
+                                            {review.rating && (
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <div className="flex items-center text-yellow-400">
+                                                        {[...Array(5)].map((_, i) => (
+                                                            <Star 
+                                                                key={i}
+                                                                size={14}
+                                                                fill={i < Math.round(review.rating! / 2) ? 'currentColor' : 'none'}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                    <span className="text-xs text-gray-400">{review.rating}/10</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {review.url && (
+                                            <a 
+                                                href={review.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="text-cyan-400 hover:text-cyan-300 transition-colors ml-4 flex-shrink-0"
+                                            >
+                                                <ExternalLink size={18} />
+                                            </a>
+                                        )}
+                                    </div>
+                                    <p className="text-gray-300 leading-relaxed line-clamp-4">{review.content}</p>
+                                </motion.div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-center text-gray-600 text-lg py-20 italic">No reviews available yet.</p>
+                    )}
                 </div>
             )}
 
