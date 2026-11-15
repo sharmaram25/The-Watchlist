@@ -11,6 +11,8 @@ export interface Movie {
   genre_ids: number[];
   media_type?: 'movie' | 'tv' | 'person';
   popularity: number;
+  original_title?: string;
+  original_language?: string;
 }
 
 export interface MovieDetails extends Movie {
@@ -94,6 +96,7 @@ export interface CrewMember {
   id: number;
   name: string;
   job: string;
+  profile_path?: string | null;
 }
 
 export interface Video {

@@ -2,17 +2,40 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0B0B0C" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="The Watchlist — a cinematic TMDB explorer with trending picks, a mood-based recommender and a charades generator." />
+    <meta property="og:title" content="The Watchlist" />
+    <meta property="og:description" content="A cinematic way to discover movies and TV — trending picks, mood recommender and charades." />
+    <meta property="og:type" content="website" />
     <title>The Watchlist</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Connection warm-up for the critical third-party origins -->
     <link rel="preconnect" href="https://image.tmdb.org" crossorigin />
-    <link rel="preconnect" href="https://api.themoviedb.org" crossorigin />
-    <link rel="dns-prefetch" href="https://image.tmdb.org" />
-    <link rel="dns-prefetch" href="https://api.themoviedb.org" />
-    <link rel="stylesheet" href="/index.css">
-</head>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Fonts load in parallel with the app (no render-blocking CSS @import chain) -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap"
+    />
+
+    <style>
+      /* Paint the dark background instantly — no white flash before CSS/JS arrive */
+      html, body { background: #0B0B0C; color: #F2EFE9; margin: 0; }
+    </style>
+  </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <noscript>
+      <p style="font-family: system-ui, sans-serif; padding: 2rem; text-align: center">
+        The Watchlist needs JavaScript enabled to run.
+      </p>
+    </noscript>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

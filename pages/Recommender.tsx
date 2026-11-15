@@ -1,267 +1,305 @@
-import React, { useState, useEffect } from 'react';
-import { discoverContent } from '../services/tmdbService';
-import { MOOD_MAPPINGS, LANGUAGES, GENRES_LIST } from '../constants';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { m } from 'framer-motion';
+import { Check, ChevronDown, Loader2, SlidersHorizontal, X } from 'lucide-react';
+import { discoverContent, Paged } from '../services/tmdbService';
+import { MOOD_MAPPINGS, LANGUAGES, GENRES_LIST, MOOD_BLURBS } from '../constants';
 import { MoodType, Movie } from '../types';
-import MovieCard from '../components/MovieCard';
-import { Filter, Search, Compass } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import MovieGrid, { GridSkeleton } from '../components/MovieGrid';
+import { EmptyState, ErrorState } from '../components/StateViews';
+import { useDocumentTitle } from '../hooks/useUi';
+import { useCalmMotion } from '../lib/perf';
+
+const DECADES = [
+  { key: '2020s', from: 2020, to: 2029 },
+  { key: '2010s', from: 2010, to: 2019 },
+  { key: '2000s', from: 2000, to: 2009 },
+  { key: '1990s', from: 1990, to: 1999 },
+  { key: '1980s', from: 1980, to: 1989 },
+  { key: 'Classics', from: 1900, to: 1979 },
+];
+
+const RATINGS = [
+  { value: 0, label: 'Any' },
+  { value: 6, label: '6+' },
+  { value: 7, label: '7+' },
+  { value: 8, label: '8+' },
+];
+
+const SORTS = [
+  { value: 'popularity.desc', label: 'Most popular' },
+  { value: 'vote_average.desc', label: 'Highest rated' },
+  { value: 'primary_release_date.desc', label: 'Newest' },
+  { value: 'revenue.desc', label: 'Box office' },
+];
+
+const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+const MOODS = Object.values(MoodType);
 
 const Recommender: React.FC = () => {
-  const [selectedMoods, setSelectedMoods] = useState<MoodType[]>([]);
-  const [selectedGenres, setSelectedGenres] = useState<number[]>([]);
-  const [selectedYear, setSelectedYear] = useState<number | ''>('');
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
+  useDocumentTitle('Discover');
+  const calm = useCalmMotion();
+  const [params] = useSearchParams();
+
+  const initialMood = params.get('mood') as MoodType | null;
+  const [moods, setMoods] = useState<MoodType[]>(initialMood && MOODS.includes(initialMood) ? [initialMood] : []);
+  const [genres, setGenres] = useState<number[]>([]);
+  const [decade, setDecade] = useState<string | null>(null);
+  const [language, setLanguage] = useState('all');
   const [sortBy, setSortBy] = useState('popularity.desc');
   const [minRating, setMinRating] = useState(0);
-  const [results, setResults] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
-  useEffect(() => {
-    handleDiscover();
-  }, []);
+  const [feed, setFeed] = useState<(Paged<Movie> & { items: Movie[] }) | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<unknown>(undefined);
+  const requestId = useRef(0);
 
-  const toggleMood = (mood: MoodType) => {
-    if (selectedMoods.includes(mood)) {
-        setSelectedMoods(selectedMoods.filter(m => m !== mood));
-    } else {
-        setSelectedMoods([...selectedMoods, mood]);
-    }
-  };
+  const options = useMemo(() => {
+    const d = DECADES.find((x) => x.key === decade);
+    const moodGenres = moods.flatMap((mood) => MOOD_MAPPINGS[mood].genres);
+    return {
+      genres: Array.from(new Set([...moodGenres, ...genres])),
+      language,
+      fromYear: d?.from,
+      toYear: d?.to,
+      sortBy,
+      minRating,
+    };
+  }, [moods, genres, decade, language, sortBy, minRating]);
 
-  const toggleGenre = (id: number) => {
-      if (selectedGenres.includes(id)) {
-          setSelectedGenres(selectedGenres.filter(g => g !== id));
-      } else {
-          setSelectedGenres([...selectedGenres, id]);
-      }
-  };
-
-  const handleDiscover = async () => {
-    setLoading(true);
-    setHasSearched(true);
+  const run = async (page: number) => {
+    const id = ++requestId.current;
+    page === 1 ? setLoading(true) : setLoadingMore(true);
+    setError(undefined);
     try {
-      // Combine genres from selected moods
-      const moodGenres = selectedMoods.reduce<number[]>((acc, mood) => {
-          return [...acc, ...MOOD_MAPPINGS[mood].genres];
-      }, []);
-
-      // Combine mood genres with explicitly selected genres
-      const combinedGenres = [...moodGenres, ...selectedGenres];
-
-      // Remove duplicates
-      const uniqueGenres = Array.from(new Set(combinedGenres));
-
-      const movies = await discoverContent(
-        uniqueGenres,
-        selectedLanguage,
-        selectedYear ? Number(selectedYear) : undefined,
-        sortBy,
-        minRating
-      );
-      setResults(movies);
-    } catch (error) {
-      console.error(error);
+      const res = await discoverContent({ ...options, page });
+      if (id !== requestId.current) return;
+      setFeed((prev) => {
+        if (page === 1 || !prev) return { ...res, items: res.results };
+        const seen = new Set(prev.items.map((x) => x.id));
+        return { ...res, items: prev.items.concat(res.results.filter((x) => !seen.has(x.id))) };
+      });
+    } catch (e) {
+      if (id === requestId.current) setError(e);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   };
+
+  // Live results: refetch shortly after any filter change
+  useEffect(() => {
+    const t = setTimeout(() => void run(1), 280);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options]);
+
+  const refineCount = genres.length + (decade ? 1 : 0) + (language !== 'all' ? 1 : 0) + (minRating ? 1 : 0);
+  const anyFilter = moods.length + refineCount > 0 || sortBy !== 'popularity.desc';
+
+  const clearAll = () => {
+    setMoods([]);
+    setGenres([]);
+    setDecade(null);
+    setLanguage('all');
+    setSortBy('popularity.desc');
+    setMinRating(0);
+  };
+
+  const summary = [
+    ...moods,
+    ...genres.map((g) => GENRES_LIST.find((x) => x.id === g)?.name),
+    decade,
+    language !== 'all' ? LANGUAGES.find((l) => l.code === language)?.name : null,
+    minRating ? `${minRating}+ rated` : null,
+  ].filter(Boolean) as string[];
+
+  const hasMore = !!feed && feed.page < Math.min(feed.totalPages, 25);
 
   return (
-    <div className="min-h-screen pt-32 px-6 md:px-16 bg-[#020203] relative overflow-hidden">
-      <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-cyan-900/10 rounded-full blur-[120px]" />
-         <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-900/10 rounded-full blur-[120px]" />
+    <div className="min-h-screen pt-safe-nav md:pt-32 px-gutter pb-16">
+      <m.header
+        initial={calm ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="max-w-3xl mb-10 md:mb-14"
+      >
+        <p className="kicker mb-3">Discover</p>
+        <h1 className="font-display text-fluid-title text-fg text-balance">What are you in the mood for?</h1>
+        <p className="mt-4 text-fg-muted text-[17px] leading-relaxed max-w-xl text-pretty">
+          Pick a feeling or two, narrow it down if you like — the list updates as you go.
+        </p>
+      </m.header>
+
+      {/* Moods */}
+      <fieldset className="mb-8">
+        <legend className="sr-only">Moods</legend>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
+          {MOODS.map((mood) => {
+            const on = moods.includes(mood);
+            return (
+              <button
+                key={mood}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setMoods((prev) => toggle(prev, mood))}
+                className={`relative text-left rounded-xl border px-4 py-4 sm:px-5 sm:py-5 transition-[background-color,border-color] duration-200 ${
+                  on ? 'border-accent/70 bg-accent/[0.08]' : 'border-white/[0.08] bg-ink-800 hover:border-white/20 hover:bg-ink-700'
+                }`}
+              >
+                <span className="block font-display text-[1.45rem] sm:text-[1.7rem] leading-none text-fg pr-6">{mood}</span>
+                <span className="block mt-2 text-[12.5px] sm:text-[13px] text-fg-faint leading-snug">{MOOD_BLURBS[mood]}</span>
+                <span
+                  className={`absolute top-3.5 right-3.5 w-5 h-5 rounded-full flex items-center justify-center transition-[opacity,transform] duration-200 bg-accent text-accent-ink ${
+                    on ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
+                  }`}
+                  aria-hidden="true"
+                >
+                  <Check size={13} strokeWidth={3} />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      {/* Refine */}
+      <div className="border-y border-white/[0.07] py-5 mb-10">
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((o) => !o)}
+          aria-expanded={filtersOpen}
+          className="md:hidden w-full flex items-center justify-between text-fg"
+        >
+          <span className="flex items-center gap-2 text-[15px]">
+            <SlidersHorizontal size={17} aria-hidden="true" /> Refine
+            {refineCount > 0 && <span className="font-mono text-[11px] text-accent">{refineCount}</span>}
+          </span>
+          <ChevronDown size={18} className={`transition-transform ${filtersOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+        </button>
+
+        <div className={`${filtersOpen ? 'grid' : 'hidden'} md:grid gap-6 mt-5 md:mt-0`}>
+          <div className="grid md:grid-cols-[7rem_minmax(0,1fr)] gap-3 md:items-start">
+            <p className="kicker md:pt-2.5">Genres</p>
+            <div className="flex flex-wrap gap-2">
+              {GENRES_LIST.map((g) => (
+                <button key={g.id} type="button" className="chip" aria-pressed={genres.includes(g.id)} onClick={() => setGenres((p) => toggle(p, g.id))}>
+                  {g.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-[7rem_minmax(0,1fr)] gap-3 md:items-center">
+            <p className="kicker">Era</p>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Era">
+              <button type="button" role="radio" aria-checked={decade === null} className="chip" onClick={() => setDecade(null)}>
+                Any time
+              </button>
+              {DECADES.map((d) => (
+                <button key={d.key} type="button" role="radio" aria-checked={decade === d.key} className="chip" onClick={() => setDecade(d.key)}>
+                  {d.key}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-[7rem_minmax(0,1fr)] gap-3 md:items-center">
+            <p className="kicker">Rating</p>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+              <div className="flex gap-2" role="radiogroup" aria-label="Minimum rating">
+                {RATINGS.map((r) => (
+                  <button key={r.value} type="button" role="radio" aria-checked={minRating === r.value} className="chip font-mono !text-[13px]" onClick={() => setMinRating(r.value)}>
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <label className="relative">
+                  <span className="sr-only">Language</span>
+                  <select value={language} onChange={(e) => setLanguage(e.target.value)} className="field !h-9 !w-auto !pr-9 !rounded-full appearance-none text-sm">
+                    {LANGUAGES.map((l) => (
+                      <option key={l.code} value={l.code}>
+                        {l.code === 'all' ? 'Any language' : l.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-fg-faint" aria-hidden="true" />
+                </label>
+                <label className="relative">
+                  <span className="sr-only">Sort by</span>
+                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="field !h-9 !w-auto !pr-9 !rounded-full appearance-none text-sm">
+                    {SORTS.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-fg-faint" aria-hidden="true" />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="max-w-7xl mx-auto relative z-10">
-        <div className="text-center mb-16">
-            <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-900/10 border border-cyan-500/20 text-cyan-400 text-sm font-medium tracking-wider uppercase mb-6"
-            >
-                <Compass size={16} /> Discovery Engine
-            </motion.div>
-            <motion.h1 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="text-5xl md:text-7xl font-serif font-bold mb-6 text-white"
-            >
-            Find Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Vibe</span>
-            </motion.h1>
-            <motion.p 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="text-gray-400 text-lg max-w-2xl mx-auto font-light"
-            >
-            Mix and match moods and genres to curate your perfect stream.
-            </motion.p>
-        </div>
-
-        <motion.div 
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-white/5 border border-white/10 rounded-3xl p-8 mb-20 backdrop-blur-xl shadow-2xl relative overflow-hidden group"
-        >
-          <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 relative z-10">
-            <div className="space-y-4 lg:col-span-4">
-              <label className="text-xs font-bold text-cyan-500 uppercase tracking-widest flex items-center gap-2">
-                  1. Moods (Vibe Based)
-              </label>
-              <div className="flex flex-wrap gap-3">
-                {Object.values(MoodType).map((mood) => {
-                   const isSelected = selectedMoods.includes(mood);
-                   return (
-                    <button
-                        key={mood}
-                        onClick={() => toggleMood(mood)}
-                        className={`magnetic-target px-4 py-3 text-sm font-medium rounded-xl border transition-all duration-300 relative overflow-hidden ${
-                        isSelected
-                            ? 'bg-cyan-500 border-cyan-500 text-black shadow-[0_0_20px_rgba(6,182,212,0.4)]' 
-                            : 'bg-white/5 border-white/5 text-gray-400 hover:border-white/20 hover:text-white hover:bg-white/10'
-                        }`}
-                    >
-                        {mood}
-                        {isSelected && <span className="absolute top-1 right-1 w-2 h-2 bg-black rounded-full" />}
-                    </button>
-                   );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-4 lg:col-span-4">
-              <label className="text-xs font-bold text-cyan-500 uppercase tracking-widest flex items-center gap-2">
-                  2. Genres (Specific)
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {GENRES_LIST.map((genre) => {
-                   const isSelected = selectedGenres.includes(genre.id);
-                   return (
-                    <button
-                        key={genre.id}
-                        onClick={() => toggleGenre(genre.id)}
-                        className={`magnetic-target px-3 py-2 text-xs font-medium rounded-lg border transition-all duration-300 ${
-                        isSelected
-                            ? 'bg-white text-black border-white' 
-                            : 'bg-black/30 border-white/5 text-gray-500 hover:border-white/20 hover:text-white'
-                        }`}
-                    >
-                        {genre.name}
-                    </button>
-                   );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <label className="text-xs font-bold text-cyan-500 uppercase tracking-widest">3. Era (Optional)</label>
-              <div className="relative group/input">
-                 <input
-                    type="number"
-                    placeholder="e.g. 2023"
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-cyan-500 outline-none transition-all placeholder:text-gray-600 focus:bg-black/80"
-                 />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <label className="text-xs font-bold text-cyan-500 uppercase tracking-widest">4. Language</label>
-              <div className="relative group/select">
-                <select
-                    value={selectedLanguage}
-                    onChange={(e) => setSelectedLanguage(e.target.value)}
-                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-cyan-500 outline-none appearance-none cursor-pointer transition-all"
-                >
-                    {LANGUAGES.map(l => (
-                    <option key={l.code} value={l.code} className="bg-neutral-900">{l.name}</option>
-                    ))}
-                </select>
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">▼</div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <label className="text-xs font-bold text-cyan-500 uppercase tracking-widest">5. Sort By</label>
-              <div className="relative group/select">
-                <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-cyan-500 outline-none appearance-none cursor-pointer transition-all"
-                >
-                    <option value="popularity.desc" className="bg-neutral-900">Most Popular</option>
-                    <option value="vote_average.desc" className="bg-neutral-900">Top Rated</option>
-                    <option value="primary_release_date.desc" className="bg-neutral-900">Newest</option>
-                    <option value="revenue.desc" className="bg-neutral-900">Highest Revenue</option>
-                </select>
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">▼</div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <label className="text-xs font-bold text-cyan-500 uppercase tracking-widest">6. Min Rating: {minRating}</label>
-              <input 
-                type="range" 
-                min="0" 
-                max="10" 
-                step="1" 
-                value={minRating}
-                onChange={(e) => setMinRating(Number(e.target.value))}
-                className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-              />
-            </div>
-          </div>
-
-          <div className="mt-8 flex justify-between items-center border-t border-white/5 pt-8">
-            <div className="text-gray-500 text-sm">
-                {selectedMoods.length + selectedGenres.length > 0 
-                    ? `${selectedMoods.length + selectedGenres.length} filters selected` 
-                    : 'Showing popular content'}
-            </div>
-            <button
-                onClick={handleDiscover}
-                disabled={loading}
-                className="magnetic-target px-12 py-4 bg-white text-black font-bold rounded-full hover:bg-cyan-400 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(6,182,212,0.4)]"
-            >
-                {loading ? (
-                    <span className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                ) : (
-                    <Search size={20} />
-                )}
-                {loading ? 'Analyzing...' : 'Refresh Discovery'}
+      {/* Results */}
+      <div aria-live="polite" aria-busy={loading}>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 mb-6">
+          <p className="text-fg">
+            {feed && !error ? (
+              <>
+                <span className="font-display text-3xl tabular">{feed.totalResults.toLocaleString()}</span>{' '}
+                <span className="text-fg-muted">titles</span>
+                {summary.length > 0 && <span className="text-fg-faint text-sm"> · {summary.join(', ')}</span>}
+              </>
+            ) : (
+              <span className="text-fg-muted">Finding titles…</span>
+            )}
+          </p>
+          {anyFilter && (
+            <button type="button" onClick={clearAll} className="inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg">
+              <X size={14} aria-hidden="true" /> Clear all
             </button>
-          </div>
-        </motion.div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 pb-20">
-          <AnimatePresence mode="popLayout">
-            {results.map((movie, idx) => (
-                <motion.div
-                    key={movie.id}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ delay: idx * 0.05 }}
-                >
-                    <MovieCard movie={movie} index={idx} />
-                </motion.div>
-            ))}
-          </AnimatePresence>
+          )}
         </div>
-        
-        {results.length === 0 && !loading && (
-          <div className="flex flex-col items-center justify-center py-20 opacity-20">
-            <Filter size={64} className="mb-4 text-cyan-500" />
-            <p className="text-2xl font-serif text-gray-500">No results match your exact criteria.</p>
-          </div>
-        )}
+
+        {loading && !feed ? (
+          <GridSkeleton count={12} />
+        ) : error && !feed ? (
+          <ErrorState error={error} onRetry={() => run(1)} />
+        ) : feed && feed.items.length === 0 ? (
+          <EmptyState
+            title="No exact match"
+            action={
+              <button type="button" onClick={clearAll} className="btn btn-secondary">
+                Reset filters
+              </button>
+            }
+          >
+            That combination is a bit too specific. Try removing a genre or widening the era.
+          </EmptyState>
+        ) : feed ? (
+          <>
+            <div className={`transition-opacity duration-300 ${loading ? 'opacity-40' : 'opacity-100'}`}>
+              <MovieGrid movies={feed.items} />
+            </div>
+            {error ? (
+              <ErrorState error={error} onRetry={() => run(feed.page + 1)} compact className="mt-10 max-w-xl mx-auto" />
+            ) : hasMore ? (
+              <div className="flex justify-center mt-12">
+                <button type="button" onClick={() => run(feed.page + 1)} disabled={loadingMore} className="btn btn-secondary">
+                  {loadingMore && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
+                  {loadingMore ? 'Loading' : 'Show more'}
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </div>
     </div>
   );

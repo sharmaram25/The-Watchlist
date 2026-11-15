@@ -1,110 +1,110 @@
 import React, { useEffect, useRef } from 'react';
+import { usePerf } from '../lib/perf';
 
-const CustomCursor: React.FC = () => {
-  const cursorRef = useRef<HTMLDivElement>(null);
-  const trailerRef = useRef<HTMLDivElement>(null);
+const INTERACTIVE = 'a, button, input, select, textarea, label, [role="button"], [role="option"]';
+const TEXT_INPUT = 'input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), textarea';
+
+/**
+ * A precise dot with a soft trailing ring that opens up over interactive
+ * elements. Mouse devices only; disabled in low-power / reduced-motion mode.
+ * The animation loop sleeps once the ring has caught up.
+ */
+const CursorLayer: React.FC = () => {
+  const dotRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const cursor = cursorRef.current;
-    const trailer = trailerRef.current;
-    
-    if (!cursor || !trailer) return;
+    const dot = dotRef.current;
+    const ring = ringRef.current;
+    if (!dot || !ring) return;
 
-    let cursorX = 0;
-    let cursorY = 0;
-    let trailerX = 0;
-    let trailerY = 0;
+    const root = document.documentElement;
+    root.classList.add('has-custom-cursor');
 
-    const onMouseMove = (e: MouseEvent) => {
-      cursorX = e.clientX;
-      cursorY = e.clientY;
-      
-      // Immediate update for the main reticle
-      cursor.style.transform = `translate(${cursorX - 12}px, ${cursorY - 12}px)`;
+    let x = -100;
+    let y = -100;
+    let rx = -100;
+    let ry = -100;
+    let frame = 0;
+    let visible = false;
 
-      // Interactive states
-      const target = e.target as HTMLElement;
-      const isInteractive = 
-        target.tagName === 'BUTTON' || 
-        target.tagName === 'A' || 
-        target.tagName === 'INPUT' ||
-        target.closest('button') !== null ||
-        target.closest('a') !== null ||
-        target.closest('.magnetic-target') !== null;
+    const loop = () => {
+      rx += (x - rx) * 0.2;
+      ry += (y - ry) * 0.2;
+      ring.style.transform = `translate3d(${rx}px, ${ry}px, 0)`;
+      frame = Math.abs(x - rx) > 0.2 || Math.abs(y - ry) > 0.2 ? requestAnimationFrame(loop) : 0;
+    };
 
-      if (isInteractive) {
-        cursor.classList.add('is-hovering');
-        trailer.classList.add('is-hovering');
-      } else {
-        cursor.classList.remove('is-hovering');
-        trailer.classList.remove('is-hovering');
+    const setVisible = (v: boolean) => {
+      if (visible === v) return;
+      visible = v;
+      root.style.setProperty('--cursor-o', v ? '1' : '0');
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return;
+      x = e.clientX;
+      y = e.clientY;
+      if (!visible) {
+        rx = x;
+        ry = y;
+        setVisible(true);
       }
+      dot.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      if (!frame) frame = requestAnimationFrame(loop);
     };
 
-    const onMouseDown = () => {
-        cursor.classList.add('is-clicking');
-    };
-    
-    const onMouseUp = () => {
-        cursor.classList.remove('is-clicking');
+    const onOver = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      const text = !!t?.closest?.(TEXT_INPUT);
+      ring.dataset.state = text ? 'text' : t?.closest?.(INTERACTIVE) ? 'hover' : '';
     };
 
-    // Smooth trailer animation loop
-    const animateTrailer = () => {
-      const dx = cursorX - trailerX;
-      const dy = cursorY - trailerY;
-      
-      trailerX += dx * 0.15; // Soft lag factor
-      trailerY += dy * 0.15;
-      
-      if (trailer) {
-          trailer.style.transform = `translate(${trailerX - 100}px, ${trailerY - 100}px)`;
-      }
-      
-      requestAnimationFrame(animateTrailer);
-    };
+    const onDown = () => (ring.dataset.down = '1');
+    const onUp = () => delete ring.dataset.down;
+    const onLeave = () => setVisible(false);
 
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mouseup', onMouseUp);
-    const animationId = requestAnimationFrame(animateTrailer);
+    window.addEventListener('pointermove', onMove, { passive: true });
+    document.addEventListener('pointerover', onOver, { passive: true });
+    window.addEventListener('pointerdown', onDown, { passive: true });
+    window.addEventListener('pointerup', onUp, { passive: true });
+    root.addEventListener('mouseleave', onLeave);
+    window.addEventListener('blur', onLeave);
 
     return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mouseup', onMouseUp);
-      cancelAnimationFrame(animationId);
+      root.classList.remove('has-custom-cursor');
+      cancelAnimationFrame(frame);
+      window.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerover', onOver);
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointerup', onUp);
+      root.removeEventListener('mouseleave', onLeave);
+      window.removeEventListener('blur', onLeave);
     };
   }, []);
 
   return (
     <>
       <style>{`
-        .cursor-reticle { pointer-events: none; z-index: 100; fixed; top: 0; left: 0; mix-blend-mode: exclusion; transition: transform 0.05s linear; }
-        .cursor-reticle circle { transition: all 0.3s ease; }
-        .cursor-reticle.is-hovering circle.outer { r: 11; opacity: 1; }
-        .cursor-reticle.is-hovering line { opacity: 1; }
-        .cursor-reticle.is-clicking { transform: scale(0.8); }
-        
-        .cursor-trailer { pointer-events: none; z-index: 99; fixed; top: 0; left: 0; will-change: transform; }
-        .cursor-trailer-bg { width: 200px; height: 200px; background: rgba(6,182,212,0.15); border-radius: 50%; filter: blur(60px); transition: all 0.3s ease; }
-        .cursor-trailer.is-hovering .cursor-trailer-bg { background: rgba(6,182,212,0.3); transform: scale(1.5); }
+        .wl-dot, .wl-ring { position: fixed; top: 0; left: 0; pointer-events: none; z-index: 100;
+          opacity: var(--cursor-o, 0); transition: opacity .2s ease; will-change: transform; }
+        .wl-dot > span { position: absolute; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #F2EFE9; mix-blend-mode: difference; }
+        .wl-ring > span { position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%;
+          border: 1px solid rgba(242,239,233,.35); transition: transform .3s cubic-bezier(.22,1,.36,1), border-color .3s, background-color .3s, border-radius .3s, width .3s, height .3s, margin .3s; }
+        .wl-ring[data-state="hover"] > span { transform: scale(1.5); border-color: rgba(242,181,76,.8); background: rgba(242,181,76,.06); }
+        .wl-ring[data-state="text"] > span { width: 2px; height: 24px; margin: -12px 0 0 -1px; border-radius: 1px; border-color: rgba(242,181,76,.9); }
+        .wl-ring[data-down] > span { transform: scale(.85); }
       `}</style>
-
-      <div ref={cursorRef} className="fixed top-0 left-0 pointer-events-none z-[100]">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="overflow-visible">
-            <circle cx="12" cy="12" r="3" stroke="white" strokeWidth="1.5" className="outer opacity-60 transition-all duration-300" />
-            <line x1="12" y1="4" x2="12" y2="20" stroke="white" strokeWidth="1" className="opacity-0 transition-opacity duration-300" />
-            <line x1="4" y1="12" x2="20" y2="12" stroke="white" strokeWidth="1" className="opacity-0 transition-opacity duration-300" />
-            <circle cx="12" cy="12" r="2" fill="white" />
-        </svg>
-      </div>
-
-      <div ref={trailerRef} className="cursor-trailer fixed top-0 left-0 pointer-events-none z-[99]">
-        <div className="cursor-trailer-bg" />
-      </div>
+      <div ref={ringRef} className="wl-ring" aria-hidden="true"><span /></div>
+      <div ref={dotRef} className="wl-dot" aria-hidden="true"><span /></div>
     </>
   );
+};
+
+const CustomCursor: React.FC = () => {
+  const { finePointer, lite, reducedMotion } = usePerf();
+  if (!finePointer || lite || reducedMotion) return null;
+  return <CursorLayer />;
 };
 
 export default CustomCursor;

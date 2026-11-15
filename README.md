@@ -33,12 +33,13 @@ Whether you want something trending right now, a random charades prompt for game
 
 ## Features
 
-- **Trending & Popular Discovery**: Explore what’s hot across movies/TV.
-- **Fast Search Overlay**: Type, scan, jump—no page reloads.
-- **Mood Recommender**: Choose a mood, tune filters, and get curated results.
-- **Charades Mode**: Generate movie titles as prompts (with language/genre controls).
-- **Cinematic Details View**: Trailer links, credits, similar picks, poster actions.
-- **Polished Motion**: UI motion via Framer Motion for a premium feel.
+- **Your Watchlist**: save any film or series (bookmark on posters, the hero, or a title page). It's kept on your device and synced across tabs, alongside a **Recently viewed** history.
+- **Title-card hero**: today's trending titles with in-app trailer playback and a chapter strip that shows when the next slide arrives. Swipe on touch, and it pauses on hover or when hidden.
+- **Search palette**: press `/` or `Ctrl/⌘ K`. Arrow-key navigation, recent searches, and trending suggestions.
+- **Discover**: plain-language mood cards, genres, eras, and rating thresholds, with results that update live and a real result count.
+- **Charades**: cards are drawn face-down so only the actor sees them. Revealing starts the round timer and shows letter counts per word.
+- **Editorial title pages**: synopsis, key credits, cast strip, expandable reviews, a facts sidebar, and "More like this".
+- **Works everywhere**: phone bottom tab bar, fluid layout from 320px to ultrawide, low-power mode for weak devices, and offline support.
 
 ---
 
@@ -70,7 +71,6 @@ Latest captures:
 - **React Router**
 - **Framer Motion**
 - **Lucide Icons**
-- **D3** (for any data-driven visuals / UI support used in the project)
 
 ---
 
@@ -81,7 +81,11 @@ High-level map:
 - `App.tsx` — Router + layout shell
 - `pages/` — Route pages (Home, Details, Recommender, Charades, etc.)
 - `components/` — UI building blocks (Navbar, MovieCard, CustomCursor, Footer)
-- `services/` — Data access layer (TMDB fetch helpers)
+- `services/` — Resilient TMDB transport (`http.ts`) and typed API helpers (`tmdbService.ts`)
+- `hooks/` — Data fetching (`useQuery`), in-view detection, scroll lock, document title
+- `lib/` — Device capability detection (`perf.ts`) and responsive image helpers (`images.ts`)
+- `netlify/functions/tmdb.mjs` — Server-side TMDB proxy
+- `public/sw.js` — Service worker (offline shell + image cache)
 - `constants.ts` — Shared constants (image base URLs, mood/genre mapping)
 - `types.ts` — Shared TypeScript types
 
@@ -102,93 +106,75 @@ Core routes:
 
 ## Environment Variables
 
-This project uses a Vite-style environment variable:
-
-- `TMDB_API_KEY` — Server-side TMDB key for Netlify Function proxy (recommended)
-- `VITE_USE_TMDB_PROXY` — `true` to route calls through Netlify function (default)
-- `VITE_TMDB_API_KEY` — Optional local-only fallback key for direct client calls
-
-Create a `.env.local` file (or edit your existing one):
+| Variable | Where | Purpose |
+| --- | --- | --- |
+| `TMDB_API_KEY` | Netlify site settings / `.env.local` | **Recommended.** Server-side key used by the proxy function. Never shipped to the browser. |
+| `TMDB_READ_TOKEN` | Netlify site settings / `.env.local` | Optional alternative to `TMDB_API_KEY` (TMDB v4 read access token). |
+| `VITE_USE_TMDB_PROXY` | build env | `true` (default) routes calls through the proxy first. |
+| `VITE_TMDB_API_KEY` | build env | Optional client-side fallback key. It is visible to anyone who opens the bundle, so use it only as a backup. |
 
 ```bash
+# .env.local
 TMDB_API_KEY=YOUR_TMDB_API_KEY
 VITE_USE_TMDB_PROXY=true
-# Optional local fallback:
-# VITE_TMDB_API_KEY=YOUR_TMDB_API_KEY
 ```
 
-You can also start from the example file:
+`npm run dev` and `npm run preview` run the same proxy function locally (see `vite.config.ts`), so local development behaves exactly like production. No netlify-cli is needed.
 
-- `.env.example`
+---
 
-Important note: Any key used directly in client-side code can be discovered by end users. This app is configured to use a Netlify serverless proxy so your TMDB key stays server-side in production.
+## How the app stays up
+
+TMDB is blocked or flaky on some ISPs (notably `api.themoviedb.org`), and serverless functions have cold starts. `services/http.ts` makes every request resilient:
+
+- **Multiple routes**: Netlify proxy → `api.themoviedb.org` → `api.tmdb.org` (an official alias that works where the main domain is blocked). The proxy itself also fails over between both hosts.
+- **Hedged requests**: if a route hasn't answered in 2.5s, the next one is raced in parallel. The winning route is remembered.
+- **Retries and timeouts**: transient errors (network, 429, 5xx) back off and retry, and every attempt has a hard timeout.
+- **Caching**: in-memory + persistent (Cache API) with per-endpoint freshness. If every route fails, the last good copy is shown with a small "showing saved results" notice instead of an error screen.
+- **Offline**: a service worker (`public/sw.js`) caches the app shell, build assets, fonts and posters, so the app opens and browses previously seen content offline.
+- **Images**: if `image.tmdb.org` fails for a visitor, images retry through Netlify's Image CDN.
+- **Isolation**: each home rail loads (and fails) independently, and route-level error boundaries keep one broken page from blanking the app.
+
+## Performance on every device
+
+- Route-level code splitting, with the animation engine loaded asynchronously, React in a long-cached vendor chunk, and idle-time prefetch of other routes.
+- Responsive `srcset` for every TMDB image (phones never download `original`-size 4K backdrops).
+- Below-the-fold rails fetch only when they approach the viewport, and use `content-visibility` to skip offscreen rendering.
+- **Low-power mode** (`lib/perf.ts`): devices with few cores, little memory, Data Saver, or a measured frame rate under ~35fps automatically drop backdrop blur, parallax, the custom cursor and transform animations. The design stays the same. Override with `?perf=lite`, `?perf=full` or `?perf=auto`.
+- Respects `prefers-reduced-motion`. Hover effects apply only on devices that can hover. The custom cursor only runs with a mouse, and it sleeps when idle.
+- Fluid layout: a fluid gutter, a `clamp()` type scale, and auto-fitting grids from 320px phones to ultrawide monitors, with safe-area insets for notched phones.
 
 ---
 
 ## Local Development
 
-### 1) Install dependencies
-
 ```bash
 npm install
+npm run dev        # http://localhost:3000
+npm run typecheck  # TypeScript, no emit
 ```
-
-### 2) Add your environment variable
-
-```bash
-VITE_TMDB_API_KEY=YOUR_TMDB_API_KEY
-```
-
-### 3) Run the dev server
-
-```bash
-npm run dev
-```
-
----
 
 ## Production Build
 
-Build an optimized bundle:
-
 ```bash
 npm run build
+npm run preview    # serves dist/ with the local proxy on http://localhost:4173
 ```
-
-Preview the production build locally:
-
-```bash
-npm run preview
-```
-
-Vite outputs the final static site in `dist/`.
 
 ---
 
 ## Deployment Notes
 
-You can deploy `dist/` to any static host:
-
-- **Netlify**: `netlify.toml` is included. Set `TMDB_API_KEY` in Site Settings -> Environment Variables.
-- **Vercel**: framework preset “Vite”, output `dist`
-- **GitHub Pages**: also works; consider switching from `HashRouter` only if you configure SPA rewrites
+- **Netlify** (recommended): `netlify.toml` is included. Set `TMDB_API_KEY` in *Site settings → Environment variables*, then remove `VITE_TMDB_API_KEY` / `VITE_USE_TMDB_PROXY=false` if they were set. The proxy lives in `netlify/functions/tmdb.mjs`.
+- **Other static hosts**: the app works with only `VITE_TMDB_API_KEY` (direct mode with automatic host failover), but the key is then public.
 
 ---
 
 ## Troubleshooting
 
-### Blank data / request failures
-
-- Ensure `VITE_TMDB_API_KEY` is set.
-- If the UI loads but results are empty, check the browser console for fetch errors.
-
-### CORS / image download
-
-Some direct image downloads may be blocked by CORS depending on asset headers. The app falls back to opening the image in a new tab when direct download isn’t allowed.
-
-### Port already in use
-
-If `3000` is occupied, Vite will automatically try another port.
+- **"Connection Interrupted" modal**: it only appears when every route failed *and* nothing is cached. Check that `TMDB_API_KEY` is set on Netlify and that `/.netlify/functions/tmdb?endpoint=/trending/all/day` returns JSON.
+- **Proxy returns 404 HTML**: the function isn't deployed. Make sure `netlify/functions/tmdb.mjs` exists and redeploy.
+- **Stale UI after a deploy**: the service worker always fetches fresh HTML when online, so a normal reload picks up the new version.
 
 ---
 
