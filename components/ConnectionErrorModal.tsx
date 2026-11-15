@@ -1,103 +1,50 @@
-import React from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { WifiOff, ShieldAlert, Globe } from "lucide-react";
+import React from 'react';
+import { m, AnimatePresence } from 'framer-motion';
+import { Loader2, RotateCw } from 'lucide-react';
+import { useScrollLock } from '../hooks/useUi';
 
-interface ConnectionErrorModalProps {
+interface Props {
   isOpen: boolean;
   onRetry: () => void;
+  retrying?: boolean;
+  offline?: boolean;
 }
 
-const ConnectionErrorModal: React.FC<ConnectionErrorModalProps> = ({
-  isOpen,
-  onRetry,
-}) => {
+/** Last resort: every route failed AND nothing is cached. */
+const ConnectionErrorModal: React.FC<Props> = ({ isOpen, onRetry, retrying = false, offline = false }) => {
+  useScrollLock(isOpen);
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          {/* Backdrop with blur */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-          />
-
-          {/* Modal Content */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ type: "spring", duration: 0.5 }}
-            className="relative w-full max-w-lg bg-[#0a0a0b] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4" role="alertdialog" aria-modal="true" aria-labelledby="conn-title">
+          <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80" />
+          <m.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="relative w-full sm:max-w-md bg-ink-800 border border-white/10 rounded-t-2xl sm:rounded-2xl p-6 sm:p-8 pb-[calc(1.5rem+var(--safe-bottom))] sm:pb-8"
           >
-            {/* Decorative gradient line at top */}
-            <div className="h-1 w-full bg-gradient-to-r from-cyan-500 via-purple-500 to-cyan-500" />
-
-            <div className="p-8 md:p-10">
-              <div className="flex flex-col items-center text-center space-y-6">
-                {/* Icon Container */}
-                <div className="relative">
-                  <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-full" />
-                  <div className="relative p-4 bg-white/5 rounded-full border border-white/10">
-                    <WifiOff size={40} className="text-cyan-400" />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <h2 className="text-3xl font-bold font-serif text-white">
-                    Connection Interrupted
-                  </h2>
-                  <p className="text-gray-400 text-sm tracking-wide uppercase">
-                    API Access Restricted
-                  </p>
-                </div>
-
-                <div className="bg-white/5 rounded-xl p-6 border border-white/5 w-full text-left space-y-4">
-                  <div className="flex gap-4 items-start">
-                    <Globe className="text-gray-400 shrink-0 mt-1" size={20} />
-                    <div>
-                      <h3 className="text-white font-medium mb-1">
-                        Regional Restriction Detected
-                      </h3>
-                      <p className="text-gray-400 text-sm leading-relaxed">
-                        Our content provider (TMDB) may be unavailable in your
-                        current region. This is a known issue with certain ISPs.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="h-px w-full bg-white/10" />
-
-                  <div className="flex gap-4 items-start">
-                    <ShieldAlert
-                      className="text-gray-400 shrink-0 mt-1"
-                      size={20}
-                    />
-                    <div>
-                      <h3 className="text-white font-medium mb-1">
-                        Recommended Solution
-                      </h3>
-                      <p className="text-gray-400 text-sm leading-relaxed">
-                        We recommend enabling a VPN (like{" "}
-                        <span className="text-cyan-400 font-medium">
-                          Cloudflare WARP
-                        </span>
-                        ) or using a valid proxy to restore access.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={onRetry}
-                  className="w-full py-4 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white font-bold rounded-xl transition-all shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40 active:scale-[0.98]"
-                >
-                  Retry Connection
-                </button>
-              </div>
-            </div>
-          </motion.div>
+            <p className="kicker mb-3">{offline ? 'No network' : 'Signal lost'}</p>
+            <h2 id="conn-title" className="font-display text-4xl text-fg mb-4">
+              {offline ? 'You’re offline' : 'Can’t reach the archive'}
+            </h2>
+            <p className="text-fg-muted leading-relaxed mb-3">
+              {offline
+                ? 'Reconnect to Wi-Fi or mobile data — we’ll reload automatically as soon as you’re back.'
+                : 'We tried every route to our film database (TMDB) and none answered. Some networks restrict access to it.'}
+            </p>
+            {!offline && (
+              <p className="text-sm text-fg-faint leading-relaxed mb-7">
+                If it keeps happening, switch networks or turn on a DNS service such as Cloudflare WARP, then retry.
+              </p>
+            )}
+            <button type="button" onClick={onRetry} disabled={retrying} className="btn btn-lg btn-primary w-full">
+              {retrying ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : <RotateCw size={17} aria-hidden="true" />}
+              {retrying ? 'Reconnecting…' : 'Try again'}
+            </button>
+          </m.div>
         </div>
       )}
     </AnimatePresence>

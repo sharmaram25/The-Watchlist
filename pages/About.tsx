@@ -1,142 +1,95 @@
 import React from 'react';
-import { ArrowUpRight, Mail, Briefcase, Send } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ArrowUpRight } from 'lucide-react';
+import { m } from 'framer-motion';
+import { useDocumentTitle } from '../hooks/useUi';
+import { useCalmMotion, EASE_CINEMA } from '../lib/perf';
+
+const FACTS = [
+  { label: 'Current focus', value: 'Immersive UI engineering' },
+  { label: 'Tech stack', value: 'React 19, Framer Motion, TypeScript' },
+  { label: 'Location', value: 'Digital nomad' },
+];
 
 const About: React.FC = () => {
+  useDocumentTitle('Creator');
+  const calm = useCalmMotion();
+  const enter = (delay = 0) =>
+    calm
+      ? { initial: false as const, animate: { opacity: 1 } }
+      : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.7, delay, ease: EASE_CINEMA } };
+
   return (
-    <div className="min-h-screen bg-[#050505] text-white selection:bg-white selection:text-black overflow-hidden relative">
-      
-      <div className="fixed inset-0 pointer-events-none z-0">
-          <div className="absolute top-0 right-0 w-[50vw] h-[50vw] bg-white/5 rounded-full blur-[150px] mix-blend-overlay" />
-          <div className="absolute bottom-0 left-0 w-[40vw] h-[40vw] bg-cyan-900/10 rounded-full blur-[150px]" />
-      </div>
+    <div className="min-h-screen pt-safe-nav md:pt-32 pb-16 px-gutter">
+      <section className="grid gap-10 md:gap-16 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-end mb-20 md:mb-32">
+        <m.div {...enter(0)}>
+          <p className="kicker mb-5">The creator</p>
+          <h1 className="font-display text-[clamp(4.5rem,2rem+10vw,10rem)] leading-[0.85] text-fg">
+            Ram
+            <br />
+            <span className="italic text-fg-muted">Sharma</span>
+          </h1>
+          <p className="mt-8 text-xl md:text-2xl text-fg-muted max-w-2xl leading-relaxed text-pretty">
+            Digital architect and creative technologist crafting fluid, cinematic web experiences — merging performance with
+            high-end aesthetics.
+          </p>
+        </m.div>
 
-      <div className="container mx-auto px-6 pt-32 pb-20 relative z-10">
-        
-        <section className="mb-40 flex flex-col md:flex-row items-center gap-8 md:gap-0">
-            <motion.div
-                initial={{ opacity: 0, x: -50 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8 }}
-                className="flex-1 z-10"
-            >
-                <h2 className="text-cyan-500 font-mono text-sm mb-4 tracking-widest uppercase">The Creator</h2>
-                <h1 className="text-7xl md:text-9xl font-serif font-bold leading-[0.85] tracking-tight mb-8">
-                    Ram<br/>
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-gray-500 to-white">Sharma</span>
-                </h1>
-                <p className="text-xl md:text-2xl text-gray-400 max-w-2xl leading-relaxed font-light">
-                    Digital architect and creative technologist crafting fluid, cinematic web experiences. 
-                    Merging performance with high-end aesthetics.
-                </p>
-            </motion.div>
+        <m.figure {...enter(0.1)} className="justify-self-start md:justify-self-end w-56 sm:w-64 md:w-full md:max-w-[340px]">
+          <div className="aspect-[4/5] rounded-2xl overflow-hidden bg-ink-700 ring-1 ring-white/10">
+            <img src="/2.jpg" alt="Ram Sharma" width={340} height={425} decoding="async" fetchPriority="high" className="w-full h-full object-cover" />
+          </div>
+          <figcaption className="kicker mt-3">Behind the camera</figcaption>
+        </m.figure>
+      </section>
 
-            <motion.div 
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.8, delay: 0.2 }}
-                className="w-64 h-64 md:w-80 md:h-80 relative shrink-0 md:-ml-32 lg:-ml-40"
-            >
-                <div className="absolute inset-0 rounded-full bg-cyan-500/20 blur-[40px] animate-pulse-slow" />
-                <div className="w-full h-full rounded-full border-2 border-white/10 overflow-hidden relative shadow-[0_0_30px_rgba(6,182,212,0.3)] bg-black/50">
-                    <img 
-                        src="/2.jpg" 
-                        alt="Ram Sharma"
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                    />
-                </div>
-            </motion.div>
-        </section>
+      <section className="grid gap-14 md:gap-20 md:grid-cols-2 mb-20 md:mb-32">
+        <div>
+          <h2 className="font-display text-fluid-section text-fg mb-6">Philosophy</h2>
+          <div className="space-y-5 text-fg-muted text-[17px] leading-relaxed max-w-xl">
+            <p>
+              I believe the web should be more than static containers of information — an immersive medium that respects people’s
+              time while delighting their senses.
+            </p>
+            <p>
+              The Watchlist is that idea applied to a nightly ritual: choosing what to watch. Fast to load on any phone, calm to
+              browse, and a little bit theatrical.
+            </p>
+          </div>
+        </div>
+        <dl className="border-t border-white/[0.08] self-start">
+          {FACTS.map((f) => (
+            <div key={f.label} className="border-b border-white/[0.08] py-5 grid sm:grid-cols-[10rem_1fr] gap-1 sm:gap-6">
+              <dt className="kicker sm:pt-1.5">{f.label}</dt>
+              <dd className="font-display text-2xl md:text-3xl text-fg">{f.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
 
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-20 mb-40">
-             <div>
-                 <motion.h3 
-                    initial={{ opacity: 0 }}
-                    whileInView={{ opacity: 1 }}
-                    viewport={{ once: true }}
-                    className="text-4xl font-bold mb-8"
-                 >
-                     Philosophy
-                 </motion.h3>
-                 <motion.p 
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    className="text-gray-400 text-lg leading-relaxed mb-6"
-                 >
-                     I believe the web should be more than just static containers of information. 
-                     It should be an immersive medium that respects the user's time while delighting their senses.
-                 </motion.p>
-                 <motion.p 
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: 0.1 }}
-                    className="text-gray-400 text-lg leading-relaxed"
-                 >
-                     "The Watchlist" demonstrates this via magnetic interactions, non-blocking state updates, 
-                     and a 3D-aware layout engine that gives depth to flat content.
-                 </motion.p>
-             </div>
-             
-             <div className="space-y-8">
-                 <div className="border-t border-white/20 pt-4">
-                     <h4 className="text-xs font-bold uppercase tracking-widest mb-2 text-cyan-500">Current Focus</h4>
-                     <p className="text-2xl font-serif">Immersive UI Engineering</p>
-                 </div>
-                 <div className="border-t border-white/20 pt-4">
-                     <h4 className="text-xs font-bold uppercase tracking-widest mb-2 text-cyan-500">Tech Stack</h4>
-                     <p className="text-2xl font-serif">React 19, Framer Motion, TypeScript</p>
-                 </div>
-                 <div className="border-t border-white/20 pt-4">
-                     <h4 className="text-xs font-bold uppercase tracking-widest mb-2 text-cyan-500">Location</h4>
-                     <p className="text-2xl font-serif">Digital Nomad</p>
-                 </div>
-             </div>
-        </section>
-
-        <section>
-            <motion.div 
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                viewport={{ once: true }}
-                className="flex flex-col md:flex-row items-baseline justify-between border-t border-white/10 pt-20"
-            >
-                <div className="mb-10 md:mb-0 w-full max-w-2xl">
-                    <h2 className="text-6xl md:text-8xl font-serif font-bold text-white mb-8">
-                        Let's<br/>Collaborate.
-                    </h2>
-                    
-                    <a 
-                        href="mailto:sharmaram2504@gmail.com" 
-                        className="group relative inline-flex items-center gap-6 text-3xl md:text-4xl font-light text-gray-300 hover:text-white transition-colors py-4 px-2 -ml-2"
-                    >
-                         <span className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-black transition-all duration-500 group-hover:scale-110 group-hover:rotate-12 flex-shrink-0">
-                             <Send size={28} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                         </span>
-                         <span className="relative overflow-hidden">
-                            <span className="block group-hover:-translate-y-[150%] transition-transform duration-500">sharmaram2504@gmail.com</span>
-                            <span className="absolute top-0 left-0 translate-y-[150%] group-hover:translate-y-0 transition-transform duration-500 text-cyan-400 font-serif italic">
-                                Say Hello →
-                            </span>
-                         </span>
-                    </a>
-                </div>
-                
-                <div className="flex gap-8">
-                     <a href="https://portfolio-ram-sharma.netlify.app/" target="_blank" rel="noreferrer" className="magnetic-target group flex items-center gap-2 text-xl hover:text-cyan-400 transition-colors bg-white/5 px-8 py-6 rounded-full border border-white/10 hover:border-cyan-500/50 hover:bg-white/10">
-                         <Briefcase className="group-hover:scale-110 transition-transform" />
-                         <span className="relative">
-                             View Portfolio
-                         </span>
-                         <ArrowUpRight size={16} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                     </a>
-                </div>
-            </motion.div>
-        </section>
-
-      </div>
+      <section className="border-t border-white/[0.08] pt-14 md:pt-20 grid gap-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="min-w-0">
+          <h2 className="font-display text-[clamp(3rem,1.5rem+6vw,6.5rem)] leading-[0.9] text-fg mb-8">
+            Let’s make
+            <br />
+            <span className="italic text-accent">something.</span>
+          </h2>
+          <a
+            href="mailto:sharmaram2504@gmail.com"
+            className="inline-flex items-center gap-3 max-w-full text-[clamp(1.05rem,0.7rem+1.8vw,1.75rem)] text-fg link-underline"
+          >
+            <span className="truncate">sharmaram2504@gmail.com</span>
+            <ArrowUpRight size={22} className="shrink-0 text-fg-muted" aria-hidden="true" />
+          </a>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <a href="https://portfolio-ram-sharma.netlify.app/" target="_blank" rel="noreferrer" className="btn btn-lg btn-light">
+            View portfolio <ArrowUpRight size={17} aria-hidden="true" />
+          </a>
+          <a href="https://www.linkedin.com/in/ram-sharma-20rs02/" target="_blank" rel="noreferrer" className="btn btn-lg btn-secondary">
+            LinkedIn
+          </a>
+        </div>
+      </section>
     </div>
   );
 };

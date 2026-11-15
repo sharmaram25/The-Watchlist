@@ -2,23 +2,17 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  NODE_VERSION = "20"
+
 [functions]
   directory = "netlify/functions"
+  node_bundler = "esbuild"
 
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+# Allows the Netlify Image CDN (/.netlify/images) to fetch TMDB images.
+# Used only as a fallback when image.tmdb.org is unreachable for a visitor.
+[images]
+  remote_images = ["https://image\\.tmdb\\.org/.*"]
 
-[[headers]]
-  for = "/assets/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/.netlify/functions/*"
-  [headers.values]
-    Cache-Control = "public, max-age=60, s-maxage=300"
+# Response headers live in public/_headers so they also apply to manual
+# (drag-and-drop) deploys of the dist folder.

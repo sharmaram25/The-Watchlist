@@ -1,0 +1,13 @@
+{
+  "name": "The Watchlist",
+  "short_name": "Watchlist",
+  "description": "A cinematic TMDB explorer — trending picks, mood recommender and charades.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0B0B0C",
+  "theme_color": "#0B0B0C",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

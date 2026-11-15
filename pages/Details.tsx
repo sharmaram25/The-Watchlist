@@ -1,555 +1,471 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { getDetails } from '../services/tmdbService';
-import { MovieDetails } from '../types';
-import { TMDB_BACKDROP_BASE_URL, TMDB_IMAGE_BASE_URL } from '../constants';
-import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
-import { Play, Star, Clock, Calendar, ArrowLeft, Users, Download, X, Maximize2, ExternalLink, DollarSign, Award, Film, Tag, MessageSquare, Zap } from 'lucide-react';
-import MovieCard from '../components/MovieCard';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
+import { m, useScroll, useTransform, AnimatePresence, MotionValue } from 'framer-motion';
+import { Play, ArrowLeft, Download, X, Maximize2, ExternalLink, User } from 'lucide-react';
+import { getDetails, pickTrailer } from '../services/tmdbService';
+import { MovieDetails, CrewMember, Review } from '../types';
+import TmdbImage from '../components/TmdbImage';
+import SaveButton from '../components/SaveButton';
+import TrailerModal from '../components/TrailerModal';
+import { Rail } from '../components/Rail';
+import { ErrorState, EmptyState, Spinner } from '../components/StateViews';
+import { useQuery } from '../hooks/useQuery';
+import { useDocumentTitle, useEscape, useScrollLock } from '../hooks/useUi';
+import { useCalmMotion, usePerf, EASE_CINEMA } from '../lib/perf';
+import { tmdbUrl } from '../lib/images';
+import { pushRecent } from '../lib/library';
 
-const Details: React.FC = () => {
-  const { id, type } = useParams<{ id: string; type: 'movie' | 'tv' }>();
-  const [movie, setMovie] = useState<MovieDetails | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'cast' | 'crew' | 'production' | 'keywords' | 'reviews' | 'similar'>('overview');
-  const [isPosterExpanded, setIsPosterExpanded] = useState(false);
-  const scrollRef = useRef(null);
-  const { scrollY } = useScroll({ target: scrollRef });
-  
-  const heroY = useTransform(scrollY, [0, 500], [0, 200]);
-  const heroOpacity = useTransform(scrollY, [0, 400], [1, 0.2]);
+/* ---------------- helpers ---------------- */
 
-  useEffect(() => {
-    if (id && type) {
-            setMovie(null);
-      getDetails(Number(id), type).then(setMovie);
-      window.scrollTo(0, 0);
-    }
-  }, [id, type]);
+const formatMoney = (n: number) => (n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : `$${Math.round(n / 1e6)}M`);
+const formatVotes = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K` : String(n));
+const formatRuntime = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min}m`);
+const formatDate = (iso?: string) => {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? undefined : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+const languageName = (code?: string) => {
+  if (!code) return undefined;
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+};
 
-  if (!movie) return (
-    <div className="bg-[#020203] min-h-screen flex items-center justify-center">
-        <div className="w-16 h-16 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin shadow-[0_0_20px_rgba(6,182,212,0.4)]"></div>
-    </div>
+const KEY_JOBS: { label: string; jobs: string[] }[] = [
+  { label: 'Directed by', jobs: ['Director'] },
+  { label: 'Written by', jobs: ['Screenplay', 'Writer', 'Story', 'Novel'] },
+  { label: 'Music by', jobs: ['Original Music Composer', 'Music'] },
+  { label: 'Cinematography', jobs: ['Director of Photography'] },
+];
+
+const keyPeople = (crew: CrewMember[]) =>
+  KEY_JOBS.map(({ label, jobs }) => ({
+    label,
+    names: [...new Set(crew.filter((c) => jobs.includes(c.job)).map((c) => c.name))].slice(0, 3),
+  })).filter((g) => g.names.length > 0);
+
+/* ---------------- hero backdrop ---------------- */
+
+const Backdrop: React.FC<{ movie: MovieDetails; y?: MotionValue<number>; scale?: MotionValue<number> }> = ({ movie, y, scale }) => {
+  const { lite } = usePerf();
+  return (
+    <m.div style={y ? { y, scale } : undefined} className="absolute inset-0 will-change-transform">
+      <TmdbImage
+        path={movie.backdrop_path}
+        kind="backdrop"
+        sizes="100vw"
+        maxWidth={lite ? 1280 : Infinity}
+        loading="eager"
+        fetchPriority="high"
+        alt=""
+        className="w-full h-full object-cover object-[center_25%]"
+        fallback={<div className="w-full h-full bg-ink-800" />}
+      />
+    </m.div>
   );
+};
 
-  const director = movie.credits?.crew.find(c => c.job === 'Director')?.name;
-  const trailer = movie.videos?.results.find(v => v.type === 'Trailer' || v.type === 'Teaser');
+const ParallaxBackdrop: React.FC<{ movie: MovieDetails }> = ({ movie }) => {
+  const { scrollY } = useScroll();
+  const y = useTransform(scrollY, [0, 600], [0, 140]);
+  const scale = useTransform(scrollY, [0, 600], [1, 1.06]);
+  return <Backdrop movie={movie} y={y} scale={scale} />;
+};
 
-  const handleDownload = async () => {
-      if (!movie.poster_path) return;
-      const imageUrl = `${TMDB_BACKDROP_BASE_URL}${movie.poster_path}`;
-      
-      try {
-          const response = await fetch(imageUrl, {
-              method: 'GET',
-              mode: 'cors',
-              credentials: 'omit'
-          });
-          
-          if (!response.ok) throw new Error('Network response was not ok');
-          
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${movie.title || 'poster'}.jpg`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          window.URL.revokeObjectURL(url);
-      } catch (error) {
-          console.warn("Direct download blocked by CORS, opening in new tab:", error);
-          window.open(imageUrl, '_blank');
-      }
+/* ---------------- poster modal ---------------- */
+
+const PosterModal: React.FC<{ movie: MovieDetails; onClose: () => void }> = ({ movie, onClose }) => {
+  useScrollLock(true);
+  useEscape(true, onClose);
+  const [saving, setSaving] = useState(false);
+  const title = movie.title || movie.name || 'poster';
+
+  const download = async () => {
+    if (!movie.poster_path) return;
+    const url = tmdbUrl(movie.poster_path, 'original')!;
+    const name = title.replace(/[\\/:*?"<>|]+/g, '').trim() || 'poster';
+    setSaving(true);
+    try {
+      const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blobUrl = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `${name}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch {
+      window.open(url, '_blank', 'noopener');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="bg-[#020203] min-h-screen text-white relative overflow-hidden font-sans selection:bg-cyan-500/30" ref={scrollRef}>
-
-      <Link to="/" className="magnetic-target fixed top-24 left-8 z-50 p-4 bg-black/40 backdrop-blur-md rounded-full border border-white/5 hover:border-cyan-500/50 hover:bg-cyan-950/30 text-white transition-all group">
-        <ArrowLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
-      </Link>
-
-      <div className="relative h-screen w-full">
-        <motion.div 
-            style={{ y: heroY, opacity: heroOpacity }}
-            className="absolute inset-0"
-        >
-            {movie.backdrop_path ? (
-                <img 
-                    src={`${TMDB_BACKDROP_BASE_URL}${movie.backdrop_path}`} 
-                    className="w-full h-full object-cover"
-                    alt="backdrop"
-                />
-            ) : (
-                 <div className="w-full h-full bg-neutral-900" />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#020203] via-[#020203]/50 to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#020203] via-[#020203]/40 to-transparent" />
-        </motion.div>
-
-        <div className="absolute inset-0 flex flex-col justify-end px-8 md:px-24 pb-24 z-10">
-             <motion.div
-                initial={{ opacity: 0, y: 100 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
-                className="max-w-4xl"
-             >
-                <div className="flex flex-wrap gap-3 mb-6">
-                    {movie.status === 'Released' && <span className="px-3 py-1 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] shadow-[0_0_10px_rgba(6,182,212,0.2)]">Now Showing</span>}
-                    {movie.genres.map(g => (
-                        <span key={g.id} className="px-3 py-1 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[10px] uppercase tracking-[0.2em] text-gray-300">
-                            {g.name}
-                        </span>
-                    ))}
-                </div>
-
-                <h1 className="text-5xl md:text-8xl font-serif font-bold mb-6 leading-[0.9] tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-white/60">
-                    {movie.title || movie.name}
-                </h1>
-
-                <div className="flex items-center gap-6 text-lg text-gray-300 mb-8 font-light">
-                    <span className="flex items-center gap-2 text-cyan-400">
-                        <Star fill="currentColor" size={16} /> <span className="font-bold text-white">{movie.vote_average.toFixed(1)}</span>
-                        {movie.vote_count && <span className="text-xs text-gray-500 ml-1">({(movie.vote_count / 1000).toFixed(1)}K)</span>}
-                    </span>
-                    <span className="flex items-center gap-2">
-                        <Calendar size={18}/> {new Date(movie.release_date || movie.first_air_date || '').getFullYear()}
-                    </span>
-                    {movie.runtime && (
-                        <span className="flex items-center gap-2">
-                            <Clock size={18}/> {Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m
-                        </span>
-                    )}
-                    {movie.episode_run_time?.[0] && (
-                        <span className="flex items-center gap-2">
-                            <Clock size={18}/> {movie.episode_run_time[0]}m/ep
-                        </span>
-                    )}
-                </div>
-
-                <div className="flex flex-wrap gap-4">
-                     {trailer && (
-                         <a 
-                           href={`https://www.youtube.com/watch?v=${trailer.key}`}
-                           target="_blank"
-                           rel="noreferrer"
-                           className="magnetic-target bg-white text-black hover:bg-cyan-400 px-8 py-4 rounded-full font-bold flex items-center gap-3 transition-all transform hover:scale-105 shadow-[0_0_40px_rgba(255,255,255,0.2)] hover:shadow-[0_0_40px_rgba(6,182,212,0.5)]"
-                         >
-                             <Play fill="currentColor" size={20} /> <span className="tracking-wide">Watch Trailer</span>
-                         </a>
-                     )}
-                </div>
-             </motion.div>
-        </div>
+    <m.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${title} poster`}
+      className="fixed inset-0 z-[80] bg-black/95 flex flex-col items-center justify-center gap-5 p-4 pt-[calc(1rem+var(--safe-top))] pb-[calc(1rem+var(--safe-bottom))]"
+      onClick={onClose}
+    >
+      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <button type="button" onClick={download} disabled={saving} className="btn btn-light">
+          <Download size={17} aria-hidden="true" /> {saving ? 'Saving…' : 'Save poster'}
+        </button>
+        <button type="button" onClick={onClose} className="btn-icon" aria-label="Close" autoFocus>
+          <X size={20} aria-hidden="true" />
+        </button>
       </div>
+      <div onClick={(e) => e.stopPropagation()}>
+        <TmdbImage
+          path={movie.poster_path}
+          kind="poster"
+          size="w780"
+          sizes="(max-width: 640px) 90vw, 560px"
+          loading="eager"
+          alt={`${title} poster`}
+          className="max-h-[calc(100svh-8rem)] w-auto rounded-lg ring-1 ring-white/10"
+        />
+      </div>
+    </m.div>
+  );
+};
 
-      <div className="relative z-20 bg-[#020203] -mt-10 rounded-t-[3rem] border-t border-white/5 pt-12 min-h-screen px-6 md:px-24 shadow-[0_-20px_50px_rgba(0,0,0,1)]">
-        
-        <div className="flex gap-8 border-b border-white/5 pb-4 mb-12 overflow-x-auto hide-scrollbar">
-            {['Overview', 'Cast', 'Crew', 'Production', 'Keywords', 'Reviews', 'Similar'].map((tab) => (
-                <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab.toLowerCase() as any)}
-                    className={`magnetic-target text-sm md:text-lg font-medium tracking-widest uppercase pb-4 transition-all relative whitespace-nowrap ${
-                        activeTab === tab.toLowerCase() ? 'text-cyan-400' : 'text-gray-600 hover:text-white'
-                    }`}
-                >
-                    {tab}
-                    {activeTab === tab.toLowerCase() && (
-                        <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
+/* ---------------- review ---------------- */
+
+const ReviewCard: React.FC<{ review: Review }> = ({ review }) => {
+  const [open, setOpen] = useState(false);
+  const long = review.content.length > 420;
+  return (
+    <article className="border-t border-white/[0.07] pt-6">
+      <header className="flex items-center justify-between gap-4 mb-3">
+        <div className="min-w-0">
+          <p className="text-fg font-medium truncate">{review.author}</p>
+          {!!review.rating && <p className="font-mono text-[11px] text-fg-faint mt-0.5 tabular">{review.rating} / 10</p>}
+        </div>
+        {review.url && (
+          <a href={review.url} target="_blank" rel="noreferrer" className="text-fg-faint hover:text-fg p-1" aria-label={`Read ${review.author}'s review on TMDB`}>
+            <ExternalLink size={16} aria-hidden="true" />
+          </a>
+        )}
+      </header>
+      <p className={`text-fg-muted leading-relaxed whitespace-pre-line ${open ? '' : 'line-clamp-5'}`}>{review.content}</p>
+      {long && (
+        <button type="button" onClick={() => setOpen((o) => !o)} className="mt-2 text-sm text-fg link-underline">
+          {open ? 'Show less' : 'Read full review'}
+        </button>
+      )}
+    </article>
+  );
+};
+
+/* ---------------- view ---------------- */
+
+const DetailsView: React.FC<{ movie: MovieDetails; type: 'movie' | 'tv' }> = ({ movie, type }) => {
+  const calm = useCalmMotion();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [posterOpen, setPosterOpen] = useState(false);
+  const [trailerOpen, setTrailerOpen] = useState(false);
+  const closePoster = useCallback(() => setPosterOpen(false), []);
+
+  const title = movie.title || movie.name || 'Untitled';
+  useDocumentTitle(title);
+
+  useEffect(() => {
+    pushRecent(movie, type);
+  }, [movie, type]);
+
+  const trailer = pickTrailer(movie.videos?.results);
+  const year = (movie.release_date || movie.first_air_date || '').slice(0, 4);
+  const cast = movie.credits?.cast ?? [];
+  const people = useMemo(() => keyPeople(movie.credits?.crew ?? []), [movie.credits?.crew]);
+  const reviews = movie.reviews?.results ?? [];
+  const similar = movie.similar?.results ?? [];
+  const keywords = (movie.keywords?.results || movie.keywords?.keywords || []).slice(0, 14);
+  const runtime = movie.runtime || movie.episode_run_time?.[0];
+  const creators = (movie as MovieDetails & { created_by?: { name: string }[] }).created_by?.map((c) => c.name) ?? [];
+
+  const rating = useMemo(() => {
+    if (type === 'movie') {
+      const pick = (c: string) =>
+        movie.release_dates?.results?.find((r) => r.iso_3166_1 === c)?.release_dates.find((d) => d.certification)?.certification;
+      return pick('US') || pick('GB') || pick('IN');
+    }
+    const pick = (c: string) => movie.content_ratings?.results?.find((r) => r.iso_3166_1 === c)?.rating;
+    return pick('US') || pick('GB') || pick('IN');
+  }, [movie, type]);
+
+  const slate = [type === 'tv' ? 'Series' : 'Film', year, rating, runtime ? (type === 'tv' ? `${runtime}m / ep` : formatRuntime(runtime)) : undefined].filter(Boolean);
+
+  const facts: { label: string; value?: React.ReactNode }[] = [
+    { label: 'Status', value: movie.status },
+    { label: type === 'tv' ? 'First aired' : 'Released', value: formatDate(movie.release_date || movie.first_air_date) },
+    ...(type === 'tv'
+      ? [
+          { label: 'Seasons', value: movie.number_of_seasons },
+          { label: 'Episodes', value: movie.number_of_episodes },
+        ]
+      : []),
+    { label: 'Language', value: languageName(movie.original_language) },
+    ...(type === 'movie'
+      ? [
+          { label: 'Budget', value: movie.budget ? formatMoney(movie.budget) : undefined },
+          { label: 'Box office', value: movie.revenue ? formatMoney(movie.revenue) : undefined },
+        ]
+      : []),
+    {
+      label: 'Studios',
+      value: movie.production_companies?.length ? movie.production_companies.slice(0, 3).map((c) => c.name).join(', ') : undefined,
+    },
+  ].filter((f) => f.value !== undefined && f.value !== null && f.value !== '');
+
+  const goBack = (e: React.MouseEvent) => {
+    if (location.key !== 'default') {
+      e.preventDefault();
+      navigate(-1);
+    }
+  };
+
+  const enter = (delay = 0) =>
+    calm
+      ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.3 } }
+      : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.7, delay, ease: EASE_CINEMA } };
+
+  return (
+    <div className="relative">
+      {/* ---------- Hero ---------- */}
+      <section className="relative min-h-[78svh] md:min-h-[86svh] flex items-end overflow-hidden grain">
+        <div className="absolute inset-0">{calm ? <Backdrop movie={movie} /> : <ParallaxBackdrop movie={movie} />}</div>
+        <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/70 to-ink/20" />
+        <div className="absolute inset-0 bg-gradient-to-r from-ink/90 via-ink/40 to-transparent" />
+
+        <Link
+          to="/"
+          onClick={goBack}
+          aria-label="Go back"
+          className="btn-icon !bg-ink/60 lite:!bg-ink/90 backdrop-blur-md absolute z-20 left-gutter top-[calc(var(--nav-h)+var(--safe-top)+0.75rem)]"
+        >
+          <ArrowLeft size={20} aria-hidden="true" />
+        </Link>
+
+        <div className="relative z-10 w-full px-gutter pt-[calc(var(--nav-h)+5rem)] pb-10 md:pb-16 grid md:grid-cols-[auto_minmax(0,1fr)] gap-8 lg:gap-12 items-end">
+          {movie.poster_path && (
+            <m.button
+              type="button"
+              {...enter(0)}
+              onClick={() => setPosterOpen(true)}
+              aria-label="View poster"
+              className="hidden md:block group relative w-48 lg:w-60 3xl:w-72 aspect-[2/3] rounded-lg overflow-hidden ring-1 ring-white/10 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.9)]"
+            >
+              <TmdbImage path={movie.poster_path} kind="poster" size="w500" sizes="(min-width: 1920px) 288px, 240px" loading="eager" alt="" className="w-full h-full object-cover" />
+              <span className="absolute inset-0 flex items-center justify-center bg-ink/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Maximize2 size={26} aria-hidden="true" />
+              </span>
+            </m.button>
+          )}
+
+          <m.div {...enter(0.08)} className="min-w-0 max-w-4xl">
+            <p className="kicker flex flex-wrap gap-x-2.5 gap-y-1 mb-4">
+              {slate.map((s, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && <span aria-hidden="true">·</span>}
+                  <span className={i === 0 ? 'text-accent' : ''}>{s}</span>
+                </React.Fragment>
+              ))}
+            </p>
+            <h1 className="font-display text-fluid-display text-fg text-balance pb-[0.06em]">{title}</h1>
+            {movie.tagline && <p className="font-display italic text-xl md:text-2xl text-fg-muted mt-3 text-balance">{movie.tagline}</p>}
+
+            <div className="mt-6 flex flex-wrap items-end gap-x-8 gap-y-4">
+              {movie.vote_average > 0 && (
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display text-5xl leading-none text-fg tabular">{movie.vote_average.toFixed(1)}</span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-fg-faint leading-tight">
+                    / 10
+                    {!!movie.vote_count && (
+                      <>
+                        <br />
+                        {formatVotes(movie.vote_count)} votes
+                      </>
                     )}
+                  </span>
+                </div>
+              )}
+              {movie.genres?.length > 0 && <p className="text-sm text-fg-muted pb-1">{movie.genres.map((g) => g.name).join(' / ')}</p>}
+            </div>
+
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              {trailer && (
+                <button type="button" className="btn btn-lg btn-primary" onClick={() => setTrailerOpen(true)}>
+                  <Play size={17} fill="currentColor" aria-hidden="true" /> Play trailer
                 </button>
-            ))}
+              )}
+              <SaveButton movie={movie} type={type} />
+              {movie.poster_path && (
+                <button type="button" onClick={() => setPosterOpen(true)} className="md:hidden btn btn-lg btn-ghost">
+                  <Maximize2 size={16} aria-hidden="true" /> Poster
+                </button>
+              )}
+            </div>
+          </m.div>
+        </div>
+      </section>
+
+      {/* ---------- Body ---------- */}
+      <div className="px-gutter pt-10 md:pt-16 pb-6 grid gap-14 lg:gap-20 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-14">
+          <section aria-labelledby="synopsis">
+            <h2 id="synopsis" className="kicker mb-4">Synopsis</h2>
+            <p className="text-lg md:text-[1.35rem] leading-relaxed text-fg/90 max-w-3xl text-pretty">
+              {movie.overview || 'No synopsis has been written for this title yet.'}
+            </p>
+
+            {(people.length > 0 || creators.length > 0) && (
+              <dl className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-6 max-w-3xl">
+                {creators.length > 0 && (
+                  <div>
+                    <dt className="kicker mb-1.5">Created by</dt>
+                    <dd className="text-fg text-[15px] leading-snug">{creators.slice(0, 3).join(', ')}</dd>
+                  </div>
+                )}
+                {people.map((p) => (
+                  <div key={p.label}>
+                    <dt className="kicker mb-1.5">{p.label}</dt>
+                    <dd className="text-fg text-[15px] leading-snug">{p.names.join(', ')}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </section>
+
+          {cast.length > 0 && (
+            <section aria-labelledby="cast">
+              <h2 id="cast" className="font-display text-fluid-section text-fg mb-5">Cast</h2>
+              <ul className="flex gap-4 overflow-x-auto hide-scrollbar snap-x -mx-gutter px-gutter lg:mx-0 lg:px-0 pb-2">
+                {cast.slice(0, 16).map((p, i) => (
+                  <li key={`${p.id}-${i}`} className="snap-start shrink-0 w-[112px] sm:w-[128px]">
+                    <div className="aspect-[3/4] rounded-lg overflow-hidden bg-ink-700 ring-1 ring-inset ring-white/[0.06]">
+                      <TmdbImage
+                        path={p.profile_path}
+                        kind="profile"
+                        sizes="128px"
+                        alt=""
+                        className="w-full h-full object-cover"
+                        fallback={
+                          <div className="w-full h-full flex items-center justify-center text-fg-faint">
+                            <User size={28} aria-hidden="true" />
+                          </div>
+                        }
+                      />
+                    </div>
+                    <p className="mt-2.5 text-[14px] text-fg leading-snug line-clamp-2">{p.name}</p>
+                    {p.character && <p className="text-[12px] text-fg-faint leading-snug line-clamp-2 mt-0.5">{p.character}</p>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {reviews.length > 0 && (
+            <section aria-labelledby="reviews" className="max-w-3xl">
+              <h2 id="reviews" className="font-display text-fluid-section text-fg mb-2">
+                Reviews <span className="font-mono text-sm text-fg-faint align-middle">{reviews.length}</span>
+              </h2>
+              <div className="space-y-6">
+                {reviews.slice(0, 3).map((r) => (
+                  <ReviewCard key={r.id} review={r} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
 
-        <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="min-h-[500px]"
-        >
-            {activeTab === 'overview' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
-                    <div className="lg:col-span-2 space-y-12">
-                         <div>
-                             <h3 className="text-xs font-bold text-cyan-500 uppercase tracking-[0.2em] mb-6">Synopsis</h3>
-                             <p className="text-xl md:text-2xl leading-relaxed text-gray-300 font-light">{movie.overview}</p>
-                         </div>
-                         
-                         {movie.tagline && (
-                            <div className="border-l-2 border-cyan-500/50 pl-8 py-2">
-                                <p className="text-2xl font-serif italic text-gray-500">"{movie.tagline}"</p>
-                            </div>
-                         )}
-
-                         <div className="grid grid-cols-2 md:grid-cols-3 gap-8 pt-8 border-t border-white/5">
-                            {type === 'movie' && (
-                                <>
-                                    {movie.budget ? (
-                                        <div>
-                                            <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2 flex items-center gap-2">
-                                                <DollarSign size={12} /> Budget
-                                            </h4>
-                                            <p className="text-lg text-white">${(movie.budget / 1000000).toFixed(1)}M</p>
-                                        </div>
-                                    ) : null}
-                                    {movie.revenue ? (
-                                        <div>
-                                            <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2 flex items-center gap-2">
-                                                <Zap size={12} /> Revenue
-                                            </h4>
-                                            <p className="text-lg text-white">${(movie.revenue / 1000000).toFixed(1)}M</p>
-                                        </div>
-                                    ) : null}
-                                </>
-                            )}
-                            {director && (
-                                <div>
-                                    <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2">Director</h4>
-                                    <p className="text-lg text-white">{director}</p>
-                                </div>
-                            )}
-                            <div>
-                                <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2">Status</h4>
-                                <p className="text-lg text-white">{movie.status}</p>
-                            </div>
-                            <div>
-                                <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2">Popularity</h4>
-                                <div className="flex items-center gap-2">
-                                    <Users size={16} className="text-cyan-400" />
-                                    <p className="text-lg text-white">{Math.round(movie.popularity)}</p>
-                                </div>
-                            </div>
-                            {type === 'tv' && movie.number_of_seasons && (
-                                <div>
-                                    <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2">Seasons</h4>
-                                    <p className="text-lg text-white">{movie.number_of_seasons}</p>
-                                </div>
-                            )}
-                            {type === 'tv' && movie.number_of_episodes && (
-                                <div>
-                                    <h4 className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2">Episodes</h4>
-                                    <p className="text-lg text-white">{movie.number_of_episodes}</p>
-                                </div>
-                            )}
-                         </div>
-
-                         {movie.production_companies && movie.production_companies.length > 0 && (
-                             <div className="pt-8 border-t border-white/5">
-                                <h3 className="text-xs font-bold text-cyan-500 uppercase tracking-[0.2em] mb-6">Production Studios</h3>
-                                <div className="flex flex-wrap gap-6 items-center">
-                                    {movie.production_companies.map((company) => (
-                                        <div key={company.id} className="flex items-center gap-3 bg-white/5 backdrop-blur-md border border-white/10 rounded-lg p-3 hover:border-cyan-500/30 transition-all">
-                                            {company.logo_path && (
-                                                <img 
-                                                    src={`${TMDB_IMAGE_BASE_URL}${company.logo_path}`} 
-                                                    alt={company.name}
-                                                    className="h-8 object-contain"
-                                                />
-                                            )}
-                                            <span className="text-sm text-white font-medium">{company.name}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                             </div>
-                         )}
-
-                         {type === 'movie' && movie.release_dates?.results?.[0] && (
-                             <div className="pt-8 border-t border-white/5">
-                                <h3 className="text-xs font-bold text-cyan-500 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-                                    <Award size={14} /> Certifications
-                                </h3>
-                                <div className="flex flex-wrap gap-3">
-                                    {movie.release_dates.results.map((result, idx) => (
-                                        result.release_dates[0] && (
-                                            <div key={idx} className="px-4 py-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-center">
-                                                <p className="text-xs text-gray-400 uppercase">{result.iso_3166_1}</p>
-                                                <p className="text-sm font-bold text-cyan-400">{result.release_dates[0].certification || 'N/A'}</p>
-                                            </div>
-                                        )
-                                    ))}
-                                </div>
-                             </div>
-                         )}
-
-                         {type === 'tv' && movie.content_ratings?.results?.[0] && (
-                             <div className="pt-8 border-t border-white/5">
-                                <h3 className="text-xs font-bold text-cyan-500 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-                                    <Award size={14} /> Content Ratings
-                                </h3>
-                                <div className="flex flex-wrap gap-3">
-                                    {movie.content_ratings.results.slice(0, 5).map((rating, idx) => (
-                                        <div key={idx} className="px-4 py-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-center">
-                                            <p className="text-xs text-gray-400 uppercase">{rating.iso_3166_1}</p>
-                                            <p className="text-sm font-bold text-cyan-400">{rating.rating || 'N/A'}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                             </div>
-                         )}
-                    </div>
-                    
-                    <div className="hidden lg:block">
-                        <div 
-                            className="sticky top-32 perspective-1000 group cursor-pointer magnetic-target"
-                            onClick={() => setIsPosterExpanded(true)}
-                        >
-                             <div className="relative">
-                                <img 
-                                    src={`${TMDB_IMAGE_BASE_URL}${movie.poster_path}`} 
-                                    className="w-full rounded-sm shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 transform rotate-y-12 group-hover:rotate-y-0 transition-transform duration-700 ease-out"
-                                    alt="poster"
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-tr from-cyan-500/20 to-transparent opacity-30 mix-blend-overlay pointer-events-none rounded-sm group-hover:opacity-0 transition-opacity" />
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                     <Maximize2 size={48} className="text-white drop-shadow-lg" />
-                                </div>
-                             </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'cast' && (
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
-                    {movie.credits?.cast && movie.credits.cast.length > 0 ? (
-                        movie.credits.cast.slice(0, 15).map((person, idx) => (
-                            <motion.div 
-                                key={person.id}
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: idx * 0.05 }}
-                                className="bg-white/5 p-4 rounded-xl border border-white/5 hover:border-cyan-500/30 hover:bg-white/10 transition-all group cursor-pointer"
-                            >
-                                <div className="aspect-[2/3] rounded-lg overflow-hidden mb-4 bg-neutral-900 relative">
-                                    {person.profile_path ? (
-                                        <img src={`${TMDB_IMAGE_BASE_URL}${person.profile_path}`} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={person.name} />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-gray-700 text-xs uppercase tracking-widest">
-                                            <div className="text-center">
-                                                <Users size={24} className="opacity-50 mx-auto mb-2" />
-                                                <p className="text-[10px]">No Image</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <h4 className="font-bold text-white truncate text-sm">{person.name}</h4>
-                                <p className="text-xs text-cyan-500/80 truncate uppercase tracking-wider mt-1">{person.character}</p>
-                            </motion.div>
-                        ))
-                    ) : (
-                        <p className="col-span-full text-center text-gray-600 text-lg py-20 italic">No cast information available.</p>
-                    )}
-                </div>
-            )}
-
-            {activeTab === 'crew' && (
-                <div>
-                    {movie.credits?.crew && movie.credits.crew.length > 0 ? (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
-                            {movie.credits.crew.slice(0, 20).map((person, idx) => (
-                                <motion.div 
-                                    key={`${person.id}-${person.job}`}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: idx * 0.05 }}
-                                    className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden hover:border-cyan-500/30 hover:bg-white/10 transition-all group"
-                                >
-                                    <div className="aspect-[2/3] bg-neutral-900 overflow-hidden relative">
-                                        {person.profile_path ? (
-                                            <img src={`${TMDB_IMAGE_BASE_URL}${person.profile_path}`} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={person.name} />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-gray-700 text-xs uppercase tracking-widest">
-                                                <div className="text-center">
-                                                    <Film size={24} className="opacity-50 mx-auto mb-2" />
-                                                    <p>No Image</p>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="p-4">
-                                        <h4 className="font-bold text-white truncate text-sm">{person.name}</h4>
-                                        <p className="text-xs text-cyan-400 uppercase tracking-wider font-semibold mt-2">{person.job}</p>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-center text-gray-600 text-lg py-20 italic">No crew information available.</p>
-                    )}
-                </div>
-            )}
-
-            {activeTab === 'production' && (
-                <div className="space-y-8">
-                    {movie.production_companies && movie.production_companies.length > 0 ? (
-                        <div>
-                            <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
-                                <Film size={20} className="text-cyan-400" /> Production Companies
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {movie.production_companies.map((company) => (
-                                    <motion.div 
-                                        key={company.id}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-6 hover:border-cyan-500/30 hover:bg-white/10 transition-all group"
-                                    >
-                                        <div className="h-24 rounded-lg bg-neutral-900 mb-4 flex items-center justify-center overflow-hidden">
-                                            {company.logo_path ? (
-                                                <img 
-                                                    src={`${TMDB_IMAGE_BASE_URL}${company.logo_path}`} 
-                                                    alt={company.name}
-                                                    className="h-full object-contain group-hover:scale-105 transition-transform"
-                                                />
-                                            ) : (
-                                                <div className="text-gray-600 text-xs uppercase tracking-widest">Logo N/A</div>
-                                            )}
-                                        </div>
-                                        <h4 className="font-bold text-white truncate">{company.name}</h4>
-                                        <p className="text-xs text-cyan-500/80 uppercase tracking-wider mt-2">{company.origin_country}</p>
-                                    </motion.div>
-                                ))}
-                            </div>
-                        </div>
-                    ) : (
-                        <p className="text-center text-gray-600 text-lg py-20 italic">No production company information available.</p>
-                    )}
-                </div>
-            )}
-
-            {activeTab === 'keywords' && (
-                <div>
-                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
-                        <Tag size={20} className="text-cyan-400" /> Keywords & Tags
-                    </h3>
-                    {(() => {
-                        const keywords = movie.keywords?.results || movie.keywords?.keywords || [];
-                        return keywords && keywords.length > 0 ? (
-                            <div className="flex flex-wrap gap-3">
-                                {keywords.map((keyword) => (
-                                    <motion.div 
-                                        key={keyword.id}
-                                        initial={{ opacity: 0, scale: 0.8 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        className="px-4 py-2 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 rounded-full hover:border-cyan-500/60 hover:from-cyan-500/30 hover:to-blue-500/30 transition-all cursor-pointer group"
-                                    >
-                                        <span className="text-white font-medium group-hover:text-cyan-300 transition-colors">{keyword.name}</span>
-                                    </motion.div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-center text-gray-600 text-lg py-20 italic">No keywords available for this title.</p>
-                        );
-                    })()}
-                </div>
-            )}
-
-            {activeTab === 'reviews' && (
-                <div>
-                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
-                        <MessageSquare size={20} className="text-cyan-400" /> Reviews
-                    </h3>
-                    {movie.reviews?.results && movie.reviews.results.length > 0 ? (
-                        <div className="space-y-6">
-                            {movie.reviews.results.slice(0, 5).map((review, idx) => (
-                                <motion.div 
-                                    key={review.id}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: idx * 0.1 }}
-                                    className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-6 hover:border-cyan-500/30 transition-all"
-                                >
-                                    <div className="flex items-start justify-between mb-3">
-                                        <div className="flex-1">
-                                            <h4 className="font-bold text-white">{review.author}</h4>
-                                            {review.rating && (
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <div className="flex items-center text-yellow-400">
-                                                        {[...Array(5)].map((_, i) => (
-                                                            <Star 
-                                                                key={i}
-                                                                size={14}
-                                                                fill={i < Math.round(review.rating! / 2) ? 'currentColor' : 'none'}
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                    <span className="text-xs text-gray-400">{review.rating}/10</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                        {review.url && (
-                                            <a 
-                                                href={review.url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="text-cyan-400 hover:text-cyan-300 transition-colors ml-4 flex-shrink-0"
-                                            >
-                                                <ExternalLink size={18} />
-                                            </a>
-                                        )}
-                                    </div>
-                                    <p className="text-gray-300 leading-relaxed line-clamp-4">{review.content}</p>
-                                </motion.div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-center text-gray-600 text-lg py-20 italic">No reviews available yet.</p>
-                    )}
-                </div>
-            )}
-
-            {activeTab === 'similar' && (
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
-                    {movie.similar?.results.slice(0, 10).map((m, idx) => (
-                        <MovieCard key={m.id} movie={m} index={idx} />
-                    ))}
-                    {(!movie.similar?.results || movie.similar.results.length === 0) && (
-                        <p className="col-span-full text-center text-gray-600 text-lg py-20 italic">No similar archives found.</p>
-                    )}
-                </div>
-            )}
-        </motion.div>
+        <aside className="lg:sticky lg:top-[calc(var(--nav-h)+2rem)] self-start space-y-10">
+          {facts.length > 0 && (
+            <section aria-labelledby="facts">
+              <h2 id="facts" className="kicker mb-4">Details</h2>
+              <dl className="divide-y divide-white/[0.07] border-y border-white/[0.07]">
+                {facts.map((f) => (
+                  <div key={f.label} className="flex justify-between gap-6 py-3 text-[14px]">
+                    <dt className="text-fg-faint shrink-0">{f.label}</dt>
+                    <dd className="text-fg text-right">{f.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
+          {keywords.length > 0 && (
+            <section aria-labelledby="keywords">
+              <h2 id="keywords" className="kicker mb-4">Themes</h2>
+              <ul className="flex flex-wrap gap-2">
+                {keywords.map((k) => (
+                  <li key={k.id} className="text-[13px] text-fg-muted border border-white/10 rounded-full px-3 py-1">
+                    {k.name}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </aside>
       </div>
+
+      {similar.length > 0 && (
+        <div className="mt-6">
+          <Rail title="More like this" movies={similar} />
+        </div>
+      )}
 
       <AnimatePresence>
-        {isPosterExpanded && (
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-xl flex items-center justify-center p-8"
-                onClick={() => setIsPosterExpanded(false)}
-            >
-                <div className="relative max-h-full max-w-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
-                    <button 
-                        onClick={() => setIsPosterExpanded(false)}
-                        className="magnetic-target absolute -top-12 right-0 md:-right-12 text-white/50 hover:text-white transition-colors"
-                    >
-                        <X size={32} />
-                    </button>
-                    
-                    <img 
-                        src={`${TMDB_BACKDROP_BASE_URL}${movie.poster_path}`} 
-                        className="max-h-[80vh] w-auto rounded-lg shadow-2xl border border-white/10"
-                        alt="Expanded Poster"
-                    />
-
-                    <div className="mt-8 flex gap-4">
-                        <button 
-                            onClick={handleDownload}
-                            className="magnetic-target flex items-center gap-3 px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-cyan-400 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_30px_rgba(6,182,212,0.4)]"
-                        >
-                            <Download size={20} />
-                            Save Poster
-                        </button>
-                    </div>
-                </div>
-            </motion.div>
-        )}
+        {posterOpen && <PosterModal movie={movie} onClose={closePoster} />}
+        {trailerOpen && trailer && <TrailerModal videoKey={trailer.key} title={title} onClose={() => setTrailerOpen(false)} />}
       </AnimatePresence>
+    </div>
+  );
+};
+
+/* ---------------- route ---------------- */
+
+const Details: React.FC = () => {
+  const { id, type } = useParams<{ id: string; type: string }>();
+  const numericId = Number(id);
+  const validType = type === 'movie' || type === 'tv' ? type : null;
+  const valid = !!validType && Number.isInteger(numericId) && numericId > 0;
+
+  const { data, error, loading, retry } = useQuery(valid ? `details:${validType}:${numericId}` : null, () =>
+    getDetails(numericId, validType as 'movie' | 'tv'),
+  );
+
+  if (!valid) {
+    return (
+      <div className="min-h-screen pt-safe-nav px-gutter">
+        <EmptyState title="That isn’t a title">The link looks broken.</EmptyState>
+      </div>
+    );
+  }
+
+  if (data) return <DetailsView key={`${validType}-${numericId}`} movie={data} type={validType!} />;
+
+  if (error && !loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-gutter pt-safe-nav">
+        <ErrorState error={error} onRetry={retry} title="Couldn’t load this title" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Spinner label="Loading title" />
     </div>
   );
 };
